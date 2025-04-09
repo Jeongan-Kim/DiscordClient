@@ -103,34 +103,58 @@ void ChatClient::Disconnect()
     }
 }
 
-void ChatClient::Send(const std::string& message) {
-    if (isConnected) {
+void ChatClient::JoinRoom(const std::string& roomId)
+{
+    if (sock != INVALID_SOCKET) 
+    {
+        std::string msg = "JOIN_ROOM:" + roomId;
+        send(sock, msg.c_str(), msg.size(), 0);
+    }
+}
+
+void ChatClient::Send(const std::string& message) 
+{
+    if (isConnected) 
+    {
+        OutputDebugStringA((message + "\n").c_str());
         send(sock, message.c_str(), message.size(), 0);
     }
 }
 
-void ChatClient::StartReceiving() {
+void ChatClient::StartReceiving()
+{
     std::thread([this]() {
+        OutputDebugStringA("StartReceiving started\n");
         char buffer[1024];
         int bytes;
 
-        while (isConnected && (bytes = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) {
+        while (isConnected && (bytes = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) 
+        {
+            OutputDebugStringA("Received message\n");
             buffer[bytes] = '\0';
             std::string msg = buffer;
 
             // UI 쓰레드 접근 전에 isConnected 상태 다시 확인
-            if (onMessageReceived && isConnected) {
+            if (onMessageReceived && isConnected) 
+            {
                 wxTheApp->CallAfter([=]
                     {
                         onMessageReceived(msg);      
                     });
             }
         }
-
+        OutputDebugStringA("Receiving thread ended\n");
         }).detach();
 }
 
 void ChatClient::SetNickname(const std::string name)
 {
     nickname = name;
+    OutputDebugStringA("닉네임 설정 완료\n");  
+}
+
+ChatClient& ChatClient::GetInstance()
+{
+    static ChatClient instance;
+    return instance;
 }

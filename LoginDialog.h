@@ -5,8 +5,12 @@ class LoginDialog : public wxDialog {
 public:
     LoginDialog(wxWindow* parent);
 
-    wxString GetNickname() const;
+    wxString GetID() const;
+    wxString GetPassword() const;
+    bool IsSignupRequested() const;
 
 private:
-    wxTextCtrl* nicknameCtrl;
+    wxTextCtrl* idCtrl;
+    wxTextCtrl* pwCtrl;
+    bool signupRequested = false;
 };
