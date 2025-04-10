@@ -3,6 +3,7 @@
 #include "ChatClient.h"
 #include "LoginDialog.h"
 #include "RoomListDialog.h"
+#include "RegisterDialog.h"
 #include "ServerAPI.h"
 #include <windows.h>
 

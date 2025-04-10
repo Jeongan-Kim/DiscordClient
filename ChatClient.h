@@ -19,6 +19,7 @@ public:
 
     bool Connect(const std::string& ip, int port);
     void Disconnect();
+	bool IsConnected() const { return isConnected; } // 연결 상태 확인하는 함수
 
 	void JoinRoom(const std::string& roomId); // 방에 입장하는 함수
 

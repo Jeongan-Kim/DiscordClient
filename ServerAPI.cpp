@@ -12,14 +12,17 @@ bool ServerAPI::Init()
     return !serverIP.empty();
 }
 
-bool ServerAPI::Login(const std::string& id, const std::string& pw) 
+LoginResult ServerAPI::Login(const std::string& id, const std::string& pw)
 {
     ChatClient& client = ChatClient::GetInstance();
 
-    // Connect 시도
-    if (!client.Connect(serverIP, serverPort)) 
+    // Connect 확인 시도
+    if (!client.IsConnected()) 
     {
-        return false;
+        if (!client.Connect(serverIP, serverPort)) 
+        {
+            return LoginResult::LOGIN_CONNECT_ERROR;
+        }
     }
 
     // 로그인 요청 메시지 보내기
@@ -29,26 +32,68 @@ bool ServerAPI::Login(const std::string& id, const std::string& pw)
     // 응답 대기
     char buffer[256];
     int len = recv(client.GetSocket(), buffer, sizeof(buffer) - 1, 0);
+    if (len <= 0) return LoginResult::LOGIN_CONNECT_ERROR;
+
+    buffer[len] = '\0';
+    std::string response = buffer;
+
+    std::string debugMsg = "Login_Msg : " + response + "\n";
+    OutputDebugStringA(debugMsg.c_str());
+
+    if (response == "LOGIN_SUCCESS")
+    {
+        client.SetNickname(id);
+        return LoginResult::LOGIN_SUCCESS;
+    }
+    else if (response == "LOGIN_NO_ID")
+    {
+        return LoginResult::LOGIN_NO_ID;
+    }
+    else if (response == "LOGIN_WRONG_PW")
+    {
+        return LoginResult::LOGIN_WRONG_PW;
+    }
+    else if (response == "LOGIN_FORMAT_ERROR")
+    {
+        return LoginResult::LOGIN_FORMAT_ERROR;
+	}
+	else if (response == "LOGIN_CONNECT_ERROR")
+	{
+		return LoginResult::LOGIN_CONNECT_ERROR;
+	}
+	else if (response == "LOGIN_ALREADY")
+	{
+		return LoginResult::LOGIN_ALREADY;
+	}
+
+
+    return LoginResult::LOGIN_ERROR;
+}
+
+bool ServerAPI::Register(const std::string& id, const std::string& pw) 
+{
+    ChatClient& client = ChatClient::GetInstance();
+
+    if (!client.Connect(serverIP, serverPort))
+        return false;
+
+    std::string msg = "REGISTER:" + id + ":" + pw;
+    client.Send(msg);
+    std::string debugMsg1 = "클->서버 / REGISTER:" + id + ":" + pw + "\n";
+    OutputDebugStringA(debugMsg1.c_str());
+
+    char buffer[256];
+    int len = recv(client.GetSocket(), buffer, sizeof(buffer) - 1, 0);
     if (len <= 0) return false;
 
     buffer[len] = '\0';
     std::string response = buffer;
 
-    if (response == "LOGIN_SUCCESS")
-    {
-        client.SetNickname(id);  // 로그인 성공 시 닉네임 저장
-        return true;
-    }
+    std::string debugMsg2 = "서버->클 / REGISTER:" + response + "\n";
 
-    return false;
-}
+    OutputDebugStringA(debugMsg2.c_str());
 
-bool ServerAPI::Register(const std::string& id, const std::string& pw) 
-{
-    std::string msg = BuildRegisterMessage(id, pw);
-    std::string response;
-
-    return SendAndReceive(msg, response) && response == "REGISTER_OK";
+    return response == "REGISTER_OK";
 }
 
 // 메시지 포맷 예: LOGIN|아이디|비밀번호

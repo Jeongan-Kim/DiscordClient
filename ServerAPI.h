@@ -12,6 +12,17 @@
 #include <string>
 #include <iostream>
 #include "ChatClient.h"
+#include "wx/wx.h"
+
+enum class LoginResult {
+    LOGIN_SUCCESS,
+    LOGIN_NO_ID,
+    LOGIN_WRONG_PW,
+    LOGIN_FORMAT_ERROR,
+    LOGIN_CONNECT_ERROR,
+	LOGIN_ALREADY,
+	LOGIN_ERROR
+};
 
 class ServerAPI
 {
@@ -19,7 +30,7 @@ public:
     static bool Init();  // 서버 탐색 및 준비
 
     // 로그인 요청 - 성공 여부 반환
-    static bool Login(const std::string& id, const std::string& pw);
+    static LoginResult Login(const std::string& id, const std::string& pw);
 
     // 회원가입 요청 - 성공 여부 반환
     static bool Register(const std::string& id, const std::string& pw);

@@ -65,6 +65,8 @@ std::string ChatClient::DiscoverServerIP()
 
 bool ChatClient::Connect(const std::string& ip, int port) 
 {
+    if (IsConnected()) return true;
+
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock == INVALID_SOCKET) return false;
 
