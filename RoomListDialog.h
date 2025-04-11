@@ -11,7 +11,7 @@ class RoomListDialog : public wxFrame
 {
 public:
 	// 积己磊
-    RoomListDialog(wxWindow* parent, ChatRoomManager* manager);
+    RoomListDialog(wxWindow* parent);
    
     wxString GetSelectedRoom() const;
 
@@ -23,8 +23,6 @@ private:
     wxListBox* roomListBox;
     wxButton* joinButton;
     wxString selectedRoom;
-
-	ChatRoomManager* roomManager; // 规 包府 按眉
 
     wxDECLARE_EVENT_TABLE();
 };

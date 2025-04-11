@@ -60,6 +60,8 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     chatChannelLabel = new wxStaticText(panel, wxID_ANY, "채팅 채널");
     chatHeaderSizer->Add(chatChannelLabel, 1, wxALIGN_CENTER_VERTICAL);
     chatJoinButton = new wxButton(panel, wxID_ANY, "참가");
+	chatJoinButton->Bind(wxEVT_BUTTON, &ChatFrame::OnVoiceLeaveButtonClicked, this);
+
     chatHeaderSizer->Add(chatJoinButton, 0, wxALIGN_RIGHT);
 
     chatChannelList = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxSize(140, 100), wxLC_REPORT | wxLC_NO_HEADER | wxLC_SINGLE_SEL);
@@ -70,12 +72,16 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     chatChannelBox->Add(chatHeaderSizer, 0, wxEXPAND | wxBOTTOM, 5);
     chatChannelBox->Add(chatChannelList, 1, wxEXPAND);
 
+    chatJoinButton->Enable(isInVoiceChannel); // 채팅 채널 참가 버튼 비활성화로 초기화(처음엔 채팅 채널에 참가되어있으므로)
+
     // ---------------------- 채팅 + 음성 채널 -------------------------
     wxStaticBoxSizer* voiceChannelBox = new wxStaticBoxSizer(wxVERTICAL, panel);
     wxBoxSizer* voiceHeaderSizer = new wxBoxSizer(wxHORIZONTAL);
     voiceChannelLabel = new wxStaticText(panel, wxID_ANY, "음성 채널");
     voiceHeaderSizer->Add(voiceChannelLabel, 1, wxALIGN_CENTER_VERTICAL);
     voiceJoinButton = new wxButton(panel, wxID_ANY, "참가");
+	voiceJoinButton->Bind(wxEVT_BUTTON, &ChatFrame::OnVoiceJoinButtonClicked, this);
+
     voiceHeaderSizer->Add(voiceJoinButton, 0, wxALIGN_RIGHT);
 
     voiceChannelList = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxSize(140, 100), wxLC_REPORT | wxLC_NO_HEADER | wxLC_SINGLE_SEL);
@@ -137,10 +143,27 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
 
 	//// 참여자 목록에 마우스 오른쪽 클릭 이벤트 바인드(음량 조절)
     //   participantList->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &ChatFrame::OnParticipantRightClick, this);
+    //Show();
+	OnInitLayout(); // 레이아웃 초기화 완료 표시
+
 
 	// 마이크, 헤드셋 토글 버튼 초기화(꺼놓기)
     UpdateVoiceControlsState(false);
 
+}
+
+void ChatFrame::MarkInitialized()
+{
+    isInitialized = true;
+    OutputDebugStringA("ChatFrame::MarkInitialized 호출됨\n");
+    // 미처 반영하지 못했던 voice update 반영
+    VoiceChannelManager& voiceManager = VoiceChannelManager::GetInstance();
+    if (voiceManager.HasPendingVoiceUpdate(roomId)) 
+    {
+        OutputDebugStringA("Pending voice update 반영\n");
+        std::vector<std::string> users = voiceManager.ConsumePendingUpdate(roomId);
+        voiceManager.UpdateVoiceUserList(roomId, users);
+    }
 }
 
 void ChatFrame::AppendMessage(const std::string& sender, const std::string& text)
@@ -202,18 +225,25 @@ void ChatFrame::UpdateUserList(const std::vector<std::string>& users)
 
 void ChatFrame::OnVoiceChannelJoinedByManager()
 {
+    OutputDebugStringA("OnVoiceChannelJoinedByManager\n");
+
     isInVoiceChannel = true;
     UpdateVoiceControlsState(true); // 마이크/헤드셋 버튼 활성화
-    UpdateVoiceParticipantSection(); // 참가자 목록 갱신
+    //UpdateVoiceParticipantList(); // 참가자 목록 갱신
     UpdateJoinButtons(); // [참가] 버튼 상태 갱신
 }
 
 void ChatFrame::OnVoiceChannelLeftByManager()
 {
+    OutputDebugStringA("OnVoiceChannelLeftByManager\n");
+
     isInVoiceChannel = false;
     UpdateVoiceControlsState(false); // 마이크/헤드셋 비활성화
-    UpdateVoiceParticipantSection(); // 아이콘 제거
+    //UpdateVoiceParticipantList(); // 나간 사람 빼고 음성채널 참여자 목록 업데이트
     UpdateJoinButtons(); // [참가] 버튼 상태 갱신
+
+    OutputDebugStringA("기존 참가하던 채널 나가기 완료\n");
+
 }
 
 void ChatFrame::UpdateVoiceControlsState(bool isActive)
@@ -222,8 +252,9 @@ void ChatFrame::UpdateVoiceControlsState(bool isActive)
     if (headsetToggle) headsetToggle->Enable(isActive);
 }
 
-void ChatFrame::UpdateVoiceParticipantSection()
+void ChatFrame::UpdateVoiceParticipantList()
 {
+    OutputDebugStringA("UpdateVoiceParticipantSList\n");
     if (!voiceChannelList) return;
 
     voiceChannelList->DeleteAllItems();
@@ -252,21 +283,30 @@ void ChatFrame::UpdateVoiceParticipantSection()
         voiceChannelList->InsertItem(count, name, imageIndex);
         count++;
     }
-    voiceChannelLabel->SetLabel(wxString::Format("채팅 채널 (%d명)", count));
+    voiceChannelLabel->SetLabel(wxString::Format("음성 채널 (%d명)", count));
 }
 
 void ChatFrame::UpdateJoinButtons()
 {
+	chatJoinButton->Enable(isInVoiceChannel);    // 음성 채널에 참가했으면 활성화
+	voiceJoinButton->Enable(!isInVoiceChannel);  // 음성 채널에 참가했으면 비활성화
 }
 
 void ChatFrame::OnVoiceJoinButtonClicked(wxCommandEvent& event)
 {    
-    VoiceChannelManager::GetInstance().JoinVoiceChannel(this);
+    OutputDebugStringA(("OnVoiceJoinButtonClicked" + roomId + "\n").c_str());
+    VoiceChannelManager::GetInstance().JoinVoiceChannel(this, roomId, client.GetNickname());
 }
 
 void ChatFrame::OnVoiceLeaveButtonClicked(wxCommandEvent& event)
 {
-    VoiceChannelManager::GetInstance().LeaveVoiceChannel(this);
+    OutputDebugStringA("OnVoiceLeaveButtonClicked\n");
+    VoiceChannelManager::GetInstance().LeaveVoiceChannel(this, roomId, client.GetNickname());
+}
+
+void ChatFrame::OnInitLayout()
+{
+    MarkInitialized();
 }
 
 void ChatFrame::OnSend(wxCommandEvent& event)
@@ -287,7 +327,8 @@ void ChatFrame::OnSend(wxCommandEvent& event)
 void ChatFrame::OnClose(wxCloseEvent& event)
 {
     OutputDebugStringA("OnClose 호출됨\n");
-    // 퇴장 메시지만 서버에 보내고, 실제 연결은 유지
+	VoiceChannelManager::GetInstance().LeaveVoiceChannel(this, roomId, client.GetNickname()); // 음성채널 나가기 처리
+    // 퇴장 메시지 서버에 보내기
     roomManager->LeaveRoom(roomId);
 
     event.Skip(); // 기본 닫기 동작 계속 진행 (GUI 종료)
@@ -342,7 +383,7 @@ wxTextAttr ChatFrame::GetStyleForMessage(const std::string& sender, const std::s
 
 void ChatFrame::OnMicToggle(wxCommandEvent& event)
 {
-    micStatus = event.IsChecked();
+	micStatus = event.IsChecked(); // 마이크 상태 토글
 
     wxImage img_on = LoadPngFromResource(IDB_PNG_MIC_ON);
     wxImage img_off = LoadPngFromResource(IDB_PNG_MIC_OFF);
@@ -352,7 +393,7 @@ void ChatFrame::OnMicToggle(wxCommandEvent& event)
     micToggle->SetBitmap(wxBitmap(img));
 
     // 상태 저장 및 참여자 목록 갱신 호출
-    UpdateUserList(currentUsers);
+    UpdateVoiceParticipantList();
 }
 
 void ChatFrame::OnHeadsetToggle(wxCommandEvent& event)
@@ -364,8 +405,9 @@ void ChatFrame::OnHeadsetToggle(wxCommandEvent& event)
 	wxImage img = headsetStatus ? img_on : img_off;
     img.Rescale(16, 16);
     headsetToggle->SetBitmap(wxBitmap(img));
+
     // 상태 저장 및 참여자 목록 갱신 호출
-    UpdateUserList(currentUsers);
+    UpdateVoiceParticipantList();
 }
 
 void ChatFrame::OnParticipantRightClick(wxListEvent& event) {

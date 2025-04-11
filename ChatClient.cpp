@@ -129,25 +129,35 @@ void ChatClient::StartReceiving()
         OutputDebugStringA("StartReceiving started\n");
         char buffer[1024];
         int bytes;
+        std::string recvBuffer;
 
         while (isConnected && (bytes = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) 
         {
-            OutputDebugStringA("Received message\n");
             buffer[bytes] = '\0';
-            std::string msg = buffer;
+            //std::string msg = buffer;
+            recvBuffer += buffer;
+            OutputDebugStringA("Received message\n");
 
-            // UI 쓰레드 접근 전에 isConnected 상태 다시 확인
-            if (onMessageReceived && isConnected) 
+            size_t pos;
+            while ((pos = recvBuffer.find('\n')) != std::string::npos)
             {
-                wxTheApp->CallAfter([=]
-                    {
-                        onMessageReceived(msg);      
-                    });
+                std::string msg = recvBuffer.substr(0, pos);
+                recvBuffer.erase(0, pos + 1);
+
+                if (onMessageReceived && isConnected)
+                {
+                    // 복사해서 안전하게 UI 쓰레드로 전달
+                    wxTheApp->CallAfter([=]() {
+                        onMessageReceived(msg);
+                        });
+                }
             }
         }
         OutputDebugStringA("Receiving thread ended\n");
         }).detach();
 }
+
+
 
 void ChatClient::SetNickname(const std::string name)
 {

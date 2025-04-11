@@ -1,20 +1,45 @@
-#include <wx/app.h>
+ï»¿#include <wx/app.h>
 #include <wx/splitter.h> 
 #include <sstream>
 #include <iostream>
 #include "ChatRoomManager.h"
 #include "ChatFrame.h"
+//
+//std::string Trim(const std::string& str)
+//{
+//    auto isNotSpace = [](unsigned char ch) {
+//        return ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r';
+//        };
+//
+//    size_t start = 0;
+//    while (start < str.size() && !isNotSpace((unsigned char)str[start])) ++start;
+//
+//    size_t end = str.size();
+//    while (end > start && !isNotSpace((unsigned char)str[end - 1])) --end;
+//
+//    return str.substr(start, end - start);
+//}
+//
+//std::string RemoveUTF8BOM(const std::string& str) {
+//    static const std::string bom = "\xEF\xBB\xBF";
+//    if (str.compare(0, bom.size(), bom) == 0) {
+//        return str.substr(bom.size());
+//    }
+//    return str;
+//}
 
-ChatRoomManager::ChatRoomManager(ChatClient& client) : client(client) 
+
+ChatRoomManager::ChatRoomManager()
 {
-    OutputDebugStringA("ChatRoomManager »ı¼º\n");
-    this->client.onMessageReceived = [this](const std::string& msg) 
+    OutputDebugStringA("ChatRoomManager ìƒì„±\n");
+    ChatClient& client = ChatClient::GetInstance();
+    client.onMessageReceived = [this](const std::string& msg) 
         {
-        HandleIncomingMessage(msg);
+            HandleIncomingMessage(msg);
         };
 
-	this->client.StartReceiving(); // ¸Ş½ÃÁö ¼ö½Å ½ÃÀÛ
-    OutputDebugStringA("¸Ş½ÃÁö ¼ö½Å ½ÃÀÛ\n");
+	client.StartReceiving(); // ë©”ì‹œì§€ ìˆ˜ì‹  ì‹œì‘
+    OutputDebugStringA("ë©”ì‹œì§€ ìˆ˜ì‹  ì‹œì‘\n");
 
 }
 
@@ -22,20 +47,22 @@ void ChatRoomManager::OpenRoom(const std::string& roomId)
 {
     if (chatFrames.count(roomId))
     {
-        OutputDebugStringA("Ã¤ÆÃ¹æÀÌ ÀÌ¹Ì ¿­·ÁÀÖ½À´Ï´Ù.\n");
-        chatFrames[roomId]->Raise(); // ±âÁ¸ Ã¢ ¶ç¿ì±â
+        OutputDebugStringA("ì±„íŒ…ë°©ì´ ì´ë¯¸ ì—´ë ¤ìˆìŠµë‹ˆë‹¤.\n");
+        chatFrames[roomId]->Raise(); // ê¸°ì¡´ ì°½ ë„ìš°ê¸°
         return;
     }
-
+    ChatClient& client = ChatClient::GetInstance();
     ChatFrame* frame = new ChatFrame(client, roomId, nullptr, this);
-    frame->Show();
+    //frame->Show();
     chatFrames[roomId] = frame;
+    frame->Show();  
+    OutputDebugStringA(("chatFrames[" + roomId + "] ë“±ë¡ ì™„ë£Œ\n").c_str());    
 
-    // ¼­¹ö¿¡ ¹æ Âü¿© ¸Ş½ÃÁö Àü¼Û
+    // ì„œë²„ì— ë°© ì°¸ì—¬ ë©”ì‹œì§€ ì „ì†¡
     client.JoinRoom(roomId);
-    OutputDebugStringA(("JOIN_ROOM ¸Ş½ÃÁö¸¦ º¸³Â½À´Ï´Ù: " + roomId + "\n").c_str());
+    OutputDebugStringA(("JOIN_ROOM ë©”ì‹œì§€ë¥¼ ë³´ëƒˆìŠµë‹ˆë‹¤: " + roomId + "\n").c_str());
 
-    OutputDebugStringA("Ã¤ÆÃ¹æÀ» ¿­¾ú½À´Ï´Ù.\n");
+    OutputDebugStringA("ì±„íŒ…ë°©ì„ ì—´ì—ˆìŠµë‹ˆë‹¤.\n");
 
 }
 
@@ -47,16 +74,16 @@ void ChatRoomManager::CloseRoom(const std::string& roomId)
         wxWindow* frame = it->second;
         wxTheApp->CallAfter([frame]() {
             frame->Destroy();
-            OutputDebugStringA("CloseRoom-Destroy È£ÃâµÊ");
+            OutputDebugStringA("CloseRoom-Destroy í˜¸ì¶œë¨");
             });
-        OutputDebugStringA(("CloseRoom - ¹æ ID: " + roomId + "\n").c_str());
+        OutputDebugStringA(("CloseRoom - ë°© ID: " + roomId + "\n").c_str());
 
         chatFrames.erase(it);
 
         if (chatFrames.count(roomId) == 0)
         {
             char buffer[256];
-            snprintf(buffer, sizeof(buffer), "roomId '%s' ¾øÀ½!\n", roomId.c_str());
+            snprintf(buffer, sizeof(buffer), "roomId '%s' ì—†ìŒ!\n", roomId.c_str());
             OutputDebugStringA(buffer);
         }
     }
@@ -64,14 +91,16 @@ void ChatRoomManager::CloseRoom(const std::string& roomId)
 
 void ChatRoomManager::LeaveRoom(const std::string& roomId)
 {
-	// LEAVE_ROOM:¹æID
-    client.Send("LEAVE_ROOM:" + roomId);	// ¼­¹ö¿¡ ¹æ ÅğÀå ¸Ş½ÃÁö Àü¼Û
-	CloseRoom(roomId); // Ã¤ÆÃ¹æ ´İ±â  
+	// LEAVE_ROOM:ë°©ID
+    ChatClient& client = ChatClient::GetInstance();
+
+    client.Send("LEAVE_ROOM:" + roomId);	// ì„œë²„ì— ë°© í‡´ì¥ ë©”ì‹œì§€ ì „ì†¡
+	CloseRoom(roomId); // ì±„íŒ…ë°© ë‹«ê¸°  
 }
 
 void ChatRoomManager::HandleIncomingMessage(const std::string& msg) 
 {
-    OutputDebugStringA(("¼­¹ö·ÎºÎÅÍ: " + msg + "\n").c_str());
+    OutputDebugStringA(("ì„œë²„ë¡œë¶€í„°: " + msg + "\n").c_str());
     if (msg.rfind("ROOMMSG:", 0) == 0)
     {
         HandleRoomMessage(msg);
@@ -84,12 +113,16 @@ void ChatRoomManager::HandleIncomingMessage(const std::string& msg)
     {
         HandleUserListMessage(msg);
     }
+	else if (msg.rfind("VOICE_LIST:", 0) == 0)
+	{
+        HandleVoiceListMessage(msg);
+	}
 }
 
 void ChatRoomManager::HandleRoomMessage(const std::string& msg)
 {
-    OutputDebugStringA(("¼­¹ö·ÎºÎÅÍ: " + msg + "\n").c_str());
-	// ¸Ş½ÃÁö Æ÷¸Ë ¿¹: ROOMMSG:roomId:16:24:Á¤¾È:¾È³çÇÏ¼¼¿ä~
+    OutputDebugStringA(("ì„œë²„ë¡œë¶€í„°: " + msg + "\n").c_str());
+	// ë©”ì‹œì§€ í¬ë§· ì˜ˆ: ROOMMSG:roomId:16:24:ì •ì•ˆ:ì•ˆë…•í•˜ì„¸ìš”~
 
     std::string data = msg.substr(strlen("ROOMMSG:"));
     size_t p1 = data.find(':');
@@ -107,41 +140,41 @@ void ChatRoomManager::HandleRoomMessage(const std::string& msg)
     
 	std::string message = "[" + timeStr + "] " + sender + ": " + content;
 
-    if (chatFrames.count(roomId)) // ¹æÀÌ ¿­·ÁÀÖ´Ù¸é
+    if (chatFrames.count(roomId)) // ë°©ì´ ì—´ë ¤ìˆë‹¤ë©´
     {
         wxTheApp->CallAfter([=]
             {
-                chatFrames[roomId]->AppendMessage(sender, message); // ¸Ş½ÃÁö Ãß°¡
+                chatFrames[roomId]->AppendMessage(sender, message); // ë©”ì‹œì§€ ì¶”ê°€
             });
     }
 
     if (!chatFrames.count(roomId)) {
-        // Àı´ë·Î ¹æÀ» ´Ù½Ã ¿­¸é ¾ÈµÊ!
-        OutputDebugStringA(("¼ö½ÅµÈ ¸Ş½ÃÁöÀÎµ¥ ¹æÀÌ ´İÇô ÀÖÀ½. roomId: " + roomId + "\n").c_str());
+        // ì ˆëŒ€ë¡œ ë°©ì„ ë‹¤ì‹œ ì—´ë©´ ì•ˆë¨!
+        OutputDebugStringA(("ìˆ˜ì‹ ëœ ë©”ì‹œì§€ì¸ë° ë°©ì´ ë‹«í˜€ ìˆìŒ. roomId: " + roomId + "\n").c_str());
         return;
     }
 }
 
 void ChatRoomManager::HandleSystemMessage(const std::string& msg) 
 {
-	// ¸Ş½ÃÁö Æ÷¸Ë ¿¹: SYSTEM:Á¤¾È´ÔÀÌ Ã¤ÆÃ¹æ [¹æ1]¿¡ ÀÔÀåÇÏ¼Ì½À´Ï´Ù.
-	std::string content = msg.substr(7); // SYSTEM: ¸Ş½ÃÁö¿¡¼­ SYSTEM: ºÎºĞ Á¦°Å
+	// ë©”ì‹œì§€ í¬ë§· ì˜ˆ: SYSTEM:ì •ì•ˆë‹˜ì´ ì±„íŒ…ë°© [ë°©1]ì— ì…ì¥í•˜ì…¨ìŠµë‹ˆë‹¤.
+	std::string content = msg.substr(7); // SYSTEM: ë©”ì‹œì§€ì—ì„œ SYSTEM: ë¶€ë¶„ ì œê±°
 
-    // ¹æ ÀÌ¸§ ÃßÃâ
+    // ë°© ì´ë¦„ ì¶”ì¶œ
     std::string roomName;
     size_t leftBracket = content.find('[');
     size_t rightBracket = content.find(']');
     if (leftBracket != std::string::npos && rightBracket != std::string::npos && rightBracket > leftBracket)
     {
-        roomName = content.substr(leftBracket + 1, rightBracket - leftBracket - 1); // ¹æ1, ¹æ2 µî
+        roomName = content.substr(leftBracket + 1, rightBracket - leftBracket - 1); // ë°©1, ë°©2 ë“±
     }
     else
     {
-        OutputDebugStringA("¹æ ÀÌ¸§ ÃßÃâ ½ÇÆĞ: ¸Ş½ÃÁö Çü½ÄÀÌ ¿Ã¹Ù¸£Áö ¾ÊÀ½\n");
+        OutputDebugStringA("ë°© ì´ë¦„ ì¶”ì¶œ ì‹¤íŒ¨: ë©”ì‹œì§€ í˜•ì‹ì´ ì˜¬ë°”ë¥´ì§€ ì•ŠìŒ\n");
         return;
     }
 
-    // ÇØ´ç ¹æÀÇ frame¿¡¸¸ ¸Ş½ÃÁö Àü´Ş
+    // í•´ë‹¹ ë°©ì˜ frameì—ë§Œ ë©”ì‹œì§€ ì „ë‹¬
     auto it = chatFrames.find(roomName);
     if (it != chatFrames.end())
     {
@@ -152,29 +185,35 @@ void ChatRoomManager::HandleSystemMessage(const std::string& msg)
     }
     else
     {
-        std::string debugMsg = "SYSTEM ¸Ş½ÃÁö ¹«½ÃµÊ: ¹æÀÌ ÀÌ¹Ì ´İÇô ÀÖÀ½ - " + roomName + "\n";
+        std::string debugMsg = "SYSTEM ë©”ì‹œì§€ ë¬´ì‹œë¨: ë°©ì´ ì´ë¯¸ ë‹«í˜€ ìˆìŒ - " + roomName + "\n";
         OutputDebugStringA(debugMsg.c_str());
     }
 }
 
 void ChatRoomManager::HandleUserListMessage(const std::string& msg)
 {
-    // msg ¿¹½Ã: USER_LIST:¹æID:ÀÌ¸§1,ÀÌ¸§2,...
+    // msg ì˜ˆì‹œ: USER_LIST:ë°©ID:ì´ë¦„1,ì´ë¦„2,...
 
     size_t p1 = msg.find(':');
     size_t p2 = msg.find(':', p1 + 1);
     if (p1 == std::string::npos || p2 == std::string::npos) return;
 
-    std::string roomId = msg.substr(p1 + 1, p2 - p1 - 1); // ¹æ ID
-    std::string userListStr = msg.substr(p2 + 1); // À¯Àú ¸ñ·Ï ¹®ÀÚ¿­
+    std::string roomId = msg.substr(p1 + 1, p2 - p1 - 1); // ë°© ID
+    std::string userListStr = msg.substr(p2 + 1); // ìœ ì € ëª©ë¡ ë¬¸ìì—´
 
     std::istringstream ss(userListStr);
     std::string name;
     std::vector<std::string> users;
 
+
     while (std::getline(ss, name, ','))
     {
         if (!name.empty()) users.push_back(name);
+    }
+
+    OutputDebugStringA(("users.size() = " + std::to_string(users.size()) + "\n").c_str());
+    for (const auto& u : users) {
+        OutputDebugStringA(("user = [" + u + "]\n").c_str());
     }
 
     if (chatFrames.count(roomId))
@@ -186,14 +225,68 @@ void ChatRoomManager::HandleUserListMessage(const std::string& msg)
     }
 
     if (!chatFrames.count(roomId)) {
-        // Àı´ë·Î ¹æÀ» ´Ù½Ã ¿­¸é ¾ÈµÊ!
-        OutputDebugStringA(("¼ö½ÅµÈ ¸Ş½ÃÁöÀÎµ¥ ¹æÀÌ ´İÇô ÀÖÀ½. roomId: " + roomId + "\n").c_str());
+        // ì ˆëŒ€ë¡œ ë°©ì„ ë‹¤ì‹œ ì—´ë©´ ì•ˆë¨!
+        OutputDebugStringA(("ìˆ˜ì‹ ëœ ë©”ì‹œì§€ì¸ë° ë°©ì´ ë‹«í˜€ ìˆìŒ. roomId: " + roomId + "\n").c_str());
         return;
     }
 
 }
 
-//bool ChatRoomManager::IsRoomOpen(const std::string& roomId) const
-//{
-//    return chatFrames.count(roomId) > 0; false;
-//}
+void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
+{
+    OutputDebugStringA("HandleVoiceListMessage í˜¸ì¶œ ì™„ë£Œ\n");
+    // VOICE_LIST:roomId:user1,user2,user3
+    size_t p1 = msg.find(':'); 
+    size_t p2 = msg.find(':', p1 + 1);
+    if (p1 == std::string::npos || p2 == std::string::npos) return;
+
+    std::string roomId = msg.substr(p1 + 1, p2 - p1 - 1);
+    std::string userListStr = msg.substr(p2 + 1);
+
+    std::istringstream ss(userListStr);
+    std::string name;
+    std::vector<std::string> users;
+
+    int i = 0;
+    while (std::getline(ss, name, ','))
+    {
+        OutputDebugStringA(("user[" + std::to_string(i++) + "] = [" + name + "]\n").c_str());
+        if (!name.empty()) 
+            users.push_back(name);
+    }
+
+
+
+    // VoiceChannelManagerì— ìœ ì € ë¦¬ìŠ¤íŠ¸ ì „ë‹¬
+    //OutputDebugStringA(("roomId = [" + roomId + "], length = " + std::to_string(roomId.length()) + "\n").c_str());
+
+    ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
+
+    auto it = roomManager.GetChatFrames().find(roomId);
+    if (it == roomManager.GetChatFrames().end())
+    {
+        OutputDebugStringA("it == roomManager.GetChatFrames().end()\n");
+        roomId;
+        OutputDebugStringA(("roomManager address: " + std::to_string((uintptr_t)&roomManager) + "\n").c_str());
+        it == roomManager.GetChatFrames().end();
+        VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, users);
+        return;
+    }
+    if (!it->second->IsReady())
+    {
+        OutputDebugStringA("ChatFrame not ready, caching voice update.\n");
+        VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, users);
+        return;
+    }
+
+    // UI ì¤€ë¹„ ì™„ë£Œ ìƒíƒœì—ì„œë§Œ ë°˜ì˜
+    VoiceChannelManager::GetInstance().UpdateVoiceUserList(roomId, users);
+}
+
+ChatRoomManager& ChatRoomManager::GetInstance()
+{
+    static ChatRoomManager instance;
+    return instance;
+}
+
+

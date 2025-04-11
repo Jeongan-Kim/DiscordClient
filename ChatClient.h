@@ -35,6 +35,6 @@ public:
 private:
     SOCKET sock;
     bool isConnected = false;
-    std::map<std::string, ChatFrame*> chatFrames; // 열려있는 채팅방들
+    //std::map<std::string, ChatFrame*> chatFrames; // 열려있는 채팅방들
     std::string nickname;
 };

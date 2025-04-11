@@ -6,8 +6,8 @@ EVT_CLOSE(RoomListDialog::OnClose)
 wxEND_EVENT_TABLE()
 
 
-RoomListDialog::RoomListDialog(wxWindow* parent, ChatRoomManager* manager)
-    : wxFrame(parent, wxID_ANY, "채팅방 선택", wxDefaultPosition, wxSize(300, 200)), roomManager(manager)
+RoomListDialog::RoomListDialog(wxWindow* parent)
+    : wxFrame(parent, wxID_ANY, "채팅방 선택", wxDefaultPosition, wxSize(300, 200))
 {
     wxPanel* panel = new wxPanel(this);  // ✅ 패널을 만들어서 그 위에 컨트롤 배치
 
@@ -47,10 +47,10 @@ void RoomListDialog::OnJoinClicked(wxCommandEvent& event)
         selectedRoom = roomListBox->GetString(sel);
         OutputDebugStringA("방 선택 완료\n");
 
-        if (roomManager)
-        {
-            roomManager->OpenRoom(selectedRoom.ToStdString());
-        }
+        ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
+
+        roomManager.OpenRoom(selectedRoom.ToStdString());
+        
     }
     else 
     {

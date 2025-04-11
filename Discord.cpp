@@ -24,8 +24,10 @@ bool Discord::OnInit()
         wxString id = login.GetID();
 
         ChatClient& client = ChatClient::GetInstance();
-        ChatRoomManager* roomManager = new ChatRoomManager(client);
-        RoomListDialog* roomList = new RoomListDialog(nullptr, roomManager);
+        ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
+		VoiceChannelManager& voiceManager = VoiceChannelManager::GetInstance();
+
+        RoomListDialog* roomList = new RoomListDialog(nullptr);
         roomList->Show();
         return true;
     }
