@@ -28,6 +28,8 @@ bool Discord::OnInit()
 		VoiceChannelManager& voiceManager = VoiceChannelManager::GetInstance();
 
         RoomListDialog* roomList = new RoomListDialog(nullptr);
+		roomManager.SetRoomListDialog(roomList); // 방 목록 대화상자 설정
+
         roomList->Show();
         return true;
     }

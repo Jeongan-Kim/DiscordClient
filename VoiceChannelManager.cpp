@@ -55,7 +55,8 @@ void VoiceChannelManager::UpdateVoiceUserList(const std::string& roomId, const s
 
     OutputDebugStringA(("현재 roomId : [" + roomId + "] \n").c_str());
 
-	auto it = roomManager.GetChatFrames().find(roomId);
+	auto& chatFrames = roomManager.GetChatFrames();
+	auto it = chatFrames.find(roomId);
 	if (it != roomManager.GetChatFrames().end())
 	{        
         ChatFrame* targetFrame = it->second;

@@ -80,5 +80,5 @@ private:
 
     void OnParticipantRightClick(wxListEvent& event);
 
-    void OnSetProfilePic(wxCommandEvent& event);
+    void OnSetProfilePic(wxCommandEvent& event);	
 };

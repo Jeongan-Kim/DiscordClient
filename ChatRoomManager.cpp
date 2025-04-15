@@ -4,30 +4,7 @@
 #include <iostream>
 #include "ChatRoomManager.h"
 #include "ChatFrame.h"
-//
-//std::string Trim(const std::string& str)
-//{
-//    auto isNotSpace = [](unsigned char ch) {
-//        return ch != ' ' && ch != '\t' && ch != '\n' && ch != '\r';
-//        };
-//
-//    size_t start = 0;
-//    while (start < str.size() && !isNotSpace((unsigned char)str[start])) ++start;
-//
-//    size_t end = str.size();
-//    while (end > start && !isNotSpace((unsigned char)str[end - 1])) --end;
-//
-//    return str.substr(start, end - start);
-//}
-//
-//std::string RemoveUTF8BOM(const std::string& str) {
-//    static const std::string bom = "\xEF\xBB\xBF";
-//    if (str.compare(0, bom.size(), bom) == 0) {
-//        return str.substr(bom.size());
-//    }
-//    return str;
-//}
-
+#include "RoomListDialog.h"
 
 ChatRoomManager::ChatRoomManager()
 {
@@ -117,6 +94,12 @@ void ChatRoomManager::HandleIncomingMessage(const std::string& msg)
 	{
         HandleVoiceListMessage(msg);
 	}
+	else if (msg.rfind("ROOMS_INFO:", 0) == 0)
+	{
+		// 방 목록 수신 처리
+		HandleRoomsInfoMessage(msg);
+	}
+
 }
 
 void ChatRoomManager::HandleRoomMessage(const std::string& msg)
@@ -261,9 +244,9 @@ void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
     //OutputDebugStringA(("roomId = [" + roomId + "], length = " + std::to_string(roomId.length()) + "\n").c_str());
 
     ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
-
-    auto it = roomManager.GetChatFrames().find(roomId);
-    if (it == roomManager.GetChatFrames().end())
+    auto& chatFrames = roomManager.GetChatFrames();
+    auto it = chatFrames.find(roomId);
+    if (it == chatFrames.end())
     {
         OutputDebugStringA("it == roomManager.GetChatFrames().end()\n");
         roomId;
@@ -281,6 +264,33 @@ void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
 
     // UI 준비 완료 상태에서만 반영
     VoiceChannelManager::GetInstance().UpdateVoiceUserList(roomId, users);
+}
+
+void ChatRoomManager::HandleRoomsInfoMessage(const std::string& msg)
+{
+	OutputDebugStringA("HandleRoomsInfoMessage 호출 완료\n");
+
+	// 방 목록 수신 처리
+	// msg 예시: ROOMS_INFO:(roomName, password):(roomName, password) ...
+	std::string msgData = msg.substr(strlen("ROOMS_INFO:"));
+
+	while (msgData.empty() == false)
+	{
+		size_t p1 = msgData.find(':');
+		size_t p2 = msgData.find(':', p1 + 1);
+
+		if (p1 == std::string::npos) break;
+
+		std::string roomName = msgData.substr(0, p1); // 방 이름
+		std::string password = msgData.substr(p1 + 1, p2 - p1 - 1); // 방 비밀번호
+		roomsInfo[roomName] = password; // 방 이름과 비밀번호 저장
+		msgData.erase(0, p2); // 다음 메시지로 이동
+	}
+
+	if (roomListDialog)
+	{
+		roomListDialog->RefreshRoomList(roomsInfo);		
+	}
 }
 
 ChatRoomManager& ChatRoomManager::GetInstance()
