@@ -11,12 +11,16 @@
 #define IDB_PNG_MIC_ON_HEADSET_OFF      107
 #define IDB_PNG_MIC_OFF_HEADSET_OFF     108
 #define IDB_PNG_PROFILE                 109
+#define IDB_PNG_PASSWORDICON            110
+#define IDB_PNG_NO_PASSWORDICON         111
+#define IDB_PNG_PASSWORDICON1           112
+#define IDB_PNG_PASSWORDICON2           113
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        111
+#define _APS_NEXT_RESOURCE_VALUE        115
 #define _APS_NEXT_COMMAND_VALUE         40001
 #define _APS_NEXT_CONTROL_VALUE         1001
 #define _APS_NEXT_SYMED_VALUE           101

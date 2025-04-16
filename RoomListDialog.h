@@ -25,8 +25,11 @@ private:
     void OnRoomCreateButtonClicked(wxCommandEvent& event);
 	void OnRefreshButtonClicked(wxCommandEvent& event);
 
-    wxListBox* roomListBox;
-	//wxListCtrl* roomListBox; // 방 목록을 표시하는 리스트 박스
+    //wxListBox* roomListBox;
+	wxListCtrl* roomListBox; // 방 목록을 표시하는 리스트 박스
+    wxImageList* passwordIconList; // 비밀번호 아이콘 이미지 리스트
+    
+
     wxButton* joinButton;
     wxButton* createButton;
 	wxButton* refreshButton;

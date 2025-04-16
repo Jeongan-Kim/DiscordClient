@@ -28,9 +28,27 @@ void ChatRoomManager::OpenRoom(const std::string& roomId)
         chatFrames[roomId]->Raise(); // 기존 창 띄우기
         return;
     }
+
+    // 비밀번호 방인지 체크
+	auto it = roomsInfo.find(roomId);
+    if (it != roomsInfo.end())
+    {
+        std::string password = it->second;
+        if (!password.empty())
+        {
+            // 비밀번호 입력 대화상자 띄우기
+            wxString inputPassword = wxGetTextFromUser("비밀번호를 입력하세요:", "비밀번호 방", "", nullptr, -1, -1);
+            if (inputPassword.IsEmpty() || inputPassword.ToStdString() != password)
+            {
+                wxMessageBox("비밀번호가 틀렸습니다.", "오류", wxOK | wxICON_ERROR);
+                return;
+            }
+        }
+    }
+
     ChatClient& client = ChatClient::GetInstance();
     ChatFrame* frame = new ChatFrame(client, roomId, nullptr, this);
-    //frame->Show();
+
     chatFrames[roomId] = frame;
     frame->Show();  
     OutputDebugStringA(("chatFrames[" + roomId + "] 등록 완료\n").c_str());    
