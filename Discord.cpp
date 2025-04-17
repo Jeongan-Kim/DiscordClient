@@ -1,6 +1,7 @@
 #include "Discord.h"
 #include "ChatFrame.h"
 #include "ChatRoomManager.h"
+#include "AudioIO.h"
 
 wxIMPLEMENT_APP(Discord);
 
@@ -21,12 +22,23 @@ bool Discord::OnInit()
     if (login.ShowModal() == wxID_OK)
     {        
         // 로그인 성공 시
-        wxString id = login.GetID();
-
         ChatClient& client = ChatClient::GetInstance();
+
+        AudioIO& audioIO = AudioIO::GetInstance();
+        if (!audioIO.Init())
+        {
+            wxMessageBox("오디오 초기화 실패", "오류", wxOK | wxICON_ERROR);
+            return false;
+        }
+        //audioIO.StartTest(); // 에코 테스트 
+
+
+
+        //wxString id = login.GetID();
+
         ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
 		VoiceChannelManager& voiceManager = VoiceChannelManager::GetInstance();
-
+		
         RoomListDialog* roomList = new RoomListDialog(nullptr);
 		roomManager.SetRoomListDialog(roomList); // 방 목록 대화상자 설정
 

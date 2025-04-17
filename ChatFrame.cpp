@@ -4,12 +4,12 @@
 #include "resource.h"
 #include <algorithm>
 #include <wx/filedlg.h>
+#include "AudioIO.h"
 
 ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow* parent, ChatRoomManager* manager)
 	: wxFrame(parent, wxID_ANY, roomId), client(clientInst), roomId(roomId), roomManager(manager)
 {
     OutputDebugStringA("ChatFrame 생성됨\n");
-
     Bind(wxEVT_CLOSE_WINDOW, &ChatFrame::OnClose, this); // 종료 이벤트 바인드
 
     SetSize(wxSize(800, 600));
@@ -157,13 +157,13 @@ void ChatFrame::MarkInitialized()
     isInitialized = true;
     OutputDebugStringA("ChatFrame::MarkInitialized 호출됨\n");
     // 미처 반영하지 못했던 voice update 반영
-    VoiceChannelManager& voiceManager = VoiceChannelManager::GetInstance();
-    if (voiceManager.HasPendingVoiceUpdate(roomId)) 
-    {
-        OutputDebugStringA("Pending voice update 반영\n");
-        std::vector<std::string> users = voiceManager.ConsumePendingUpdate(roomId);
-        voiceManager.UpdateVoiceUserList(roomId, users);
-    }
+    //VoiceChannelManager& voiceManager = VoiceChannelManager::GetInstance();
+    //if (voiceManager.HasPendingVoiceUpdate(roomId)) 
+    //{
+    //    OutputDebugStringA("Pending voice update 반영\n");
+    //    std::vector<std::string> users = voiceManager.ConsumePendingUpdate(roomId);
+    //    voiceManager.UpdateVoiceUserList(roomId, users);
+    //}
 }
 
 void ChatFrame::AppendMessage(const std::string& sender, const std::string& text)
@@ -259,16 +259,16 @@ void ChatFrame::UpdateVoiceParticipantList()
 
     voiceChannelList->DeleteAllItems();
 
-    const auto& voiceUsers = VoiceChannelManager::GetInstance().GetUsersInVoice(roomId);
+    auto voiceUsers = VoiceChannelManager::GetInstance().GetUsersInVoice(roomId);
     int count = 0;
 
     for (const auto& user : voiceUsers)
     {
-        wxString name(user);
-        bool micOn = true;
-        bool headsetOn = true;
+        wxString name(user.clientId);
+        bool micOn = user.micOn;
+        bool headsetOn = user.headsetOn;
 
-        if (user == client.GetNickname())
+        if (user.clientId == client.GetNickname())
         {
             name += " (나)";
             micOn = micStatus;
@@ -296,6 +296,10 @@ void ChatFrame::OnVoiceJoinButtonClicked(wxCommandEvent& event)
 {    
     OutputDebugStringA(("OnVoiceJoinButtonClicked" + roomId + "\n").c_str());
     VoiceChannelManager::GetInstance().JoinVoiceChannel(this, roomId, client.GetNickname());
+    AudioIO& audioIO = AudioIO::GetInstance();
+    audioIO.SetMicMuted(micStatus);
+    audioIO.SetHeadsetMuted(headsetStatus);
+    
 }
 
 void ChatFrame::OnVoiceLeaveButtonClicked(wxCommandEvent& event)
@@ -384,6 +388,8 @@ wxTextAttr ChatFrame::GetStyleForMessage(const std::string& sender, const std::s
 void ChatFrame::OnMicToggle(wxCommandEvent& event)
 {
 	micStatus = event.IsChecked(); // 마이크 상태 토글
+    AudioIO& audioIO = AudioIO::GetInstance();
+    audioIO.SetMicMuted(micStatus);
 
     wxImage img_on = LoadPngFromResource(IDB_PNG_MIC_ON);
     wxImage img_off = LoadPngFromResource(IDB_PNG_MIC_OFF);
@@ -392,6 +398,8 @@ void ChatFrame::OnMicToggle(wxCommandEvent& event)
     img.Rescale(16, 16);
     micToggle->SetBitmap(wxBitmap(img));
 
+    // RoomChannelManager에게 서버에게 나 마이크 토글했다고 알리라고 하기.
+    ChatRoomManager::GetInstance().MicSet(roomId, micStatus);
     // 상태 저장 및 참여자 목록 갱신 호출
     UpdateVoiceParticipantList();
 }
@@ -399,6 +407,9 @@ void ChatFrame::OnMicToggle(wxCommandEvent& event)
 void ChatFrame::OnHeadsetToggle(wxCommandEvent& event)
 {
     headsetStatus = event.IsChecked();
+    AudioIO& audioIO = AudioIO::GetInstance();
+    audioIO.SetHeadsetMuted(headsetStatus);
+
     wxImage img_on = LoadPngFromResource(IDB_PNG_HEADSET_ON);
     wxImage img_off = LoadPngFromResource(IDB_PNG_HEADSET_OFF);
 
@@ -406,6 +417,8 @@ void ChatFrame::OnHeadsetToggle(wxCommandEvent& event)
     img.Rescale(16, 16);
     headsetToggle->SetBitmap(wxBitmap(img));
 
+    // RoomChannelManager에게 서버에게 나 마이크 토글했다고 알리라고 하기.
+    ChatRoomManager::GetInstance().HeadsetSet(roomId, headsetStatus);
     // 상태 저장 및 참여자 목록 갱신 호출
     UpdateVoiceParticipantList();
 }
@@ -447,3 +460,4 @@ void ChatFrame::OnSetProfilePic(wxCommandEvent& event)
         }
     }
 }
+

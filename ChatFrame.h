@@ -26,6 +26,9 @@ public:
 
     void UpdateVoiceParticipantList(); // 채팅 + 음성 채널 참여자 목록 갱신용
 
+    bool GetMicStatus() { return micStatus; }
+    bool GetHeadsetStatus() { return headsetStatus; }
+
 private:
     ChatClient& client;
 	ChatRoomManager* roomManager; // 방 관리 객체

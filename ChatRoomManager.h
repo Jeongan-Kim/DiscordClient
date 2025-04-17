@@ -4,11 +4,14 @@
 #include <string>
 #include <vector>
 #include "ChatFrame.h"
+#include "VoiceEntry.h"
 //#include "RoomListDialog.h"
 
 // ChatFrame을 생성/ 관리함
 // ChatClient에서 수신한 메시지를 ChatFrame에 전달하는 역할
+
 class RoomListDialog; // 전방 선언
+
 
 class ChatRoomManager 
 {
@@ -20,6 +23,10 @@ public:
 	void OpenRoom(const std::string& roomId);   // 채팅방 입장, ChatFrame 생성
 	void CloseRoom(const std::string& roomId);  // 채팅방 종료, ChatFrame 삭제
 	void LeaveRoom(const std::string& roomId);  // 채팅방 퇴장 요청 서버로 전송
+
+    void MicSet(const std::string& roomId, bool status);      //마이크 설정 서버로 전송
+    void HeadsetSet(const std::string& roomId, bool status);  //헤드셋 설정 서버로 전송
+
     void HandleIncomingMessage(const std::string& msg);
 
     void HandleSystemMessage(const std::string& msg);

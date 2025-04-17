@@ -93,8 +93,36 @@ void ChatRoomManager::LeaveRoom(const std::string& roomId)
 	CloseRoom(roomId); // 채팅방 닫기  
 }
 
-void ChatRoomManager::HandleIncomingMessage(const std::string& msg) 
+void ChatRoomManager::MicSet(const std::string& roomId, bool status)
 {
+    // "VOICE_MIC:roomId:client1,1"
+    ChatClient& client = ChatClient::GetInstance();
+
+    std::string micStatus = (status == true ? "1" : "0");
+
+    client.Send("VOICE_MIC:" + roomId + ":" + client.GetNickname() + "," + micStatus);
+}
+
+// "VOICE_HEADSET:roomId:client1,1"
+void ChatRoomManager::HeadsetSet(const std::string& roomId, bool status)
+{
+    ChatClient& client = ChatClient::GetInstance();
+
+    std::string headsetStatus = (status == true ? "1" : "0");
+    client.Send("VOICE_HEADSET:" + roomId + ":" + client.GetNickname() + "," + headsetStatus);
+}
+
+void ChatRoomManager::HandleIncomingMessage(const std::string& rawMsg) 
+{
+    // 1) 메시지 끝의 개행문자(\n, \r) 제거
+    std::string msg = rawMsg;
+    while (!msg.empty() && (msg.back() == '\n' || msg.back() == '\r'))
+        msg.pop_back();
+
+    // 2) 빈 문자열이면 아무 처리도 안 하고 리턴
+    if (msg.empty())
+        return;
+
     OutputDebugStringA(("서버로부터: " + msg + "\n").c_str());
     if (msg.rfind("ROOMMSG:", 0) == 0)
     {
@@ -236,7 +264,7 @@ void ChatRoomManager::HandleUserListMessage(const std::string& msg)
 void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
 {
     OutputDebugStringA("HandleVoiceListMessage 호출 완료\n");
-    // VOICE_LIST:roomId:user1,user2,user3
+    // VOICE_LIST:roomId:user1,1,1;user2,1,0; ( 이름, 마이크, 헤드셋)
     size_t p1 = msg.find(':'); 
     size_t p2 = msg.find(':', p1 + 1);
     if (p1 == std::string::npos || p2 == std::string::npos) return;
@@ -256,32 +284,52 @@ void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
             users.push_back(name);
     }
 
+    // 2) ';' 로 split 해서 각 "userId, mic, headset" 토큰으로 분리
+    std::vector<VoiceEntry> entries;
+    std::istringstream es(userListStr);
+    std::string item;
+    while (std::getline(es, item, ';')) {
+        if (item.empty()) continue;
+
+        // 3) 각 항목 내부를 ',' 로 split
+        std::istringstream fs(item);
+        std::string id, mic, head;
+        if (std::getline(fs, id, ',') &&
+            std::getline(fs, mic, ',') &&
+            std::getline(fs, head, ','))
+        {
+            entries.push_back({
+                id,
+                mic == "1",  // "1" 이면 on
+                head == "1"
+                });
+        }
+    }
 
 
     // VoiceChannelManager에 유저 리스트 전달
-    //OutputDebugStringA(("roomId = [" + roomId + "], length = " + std::to_string(roomId.length()) + "\n").c_str());
 
     ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
     auto& chatFrames = roomManager.GetChatFrames();
     auto it = chatFrames.find(roomId);
-    if (it == chatFrames.end())
-    {
-        OutputDebugStringA("it == roomManager.GetChatFrames().end()\n");
-        roomId;
-        OutputDebugStringA(("roomManager address: " + std::to_string((uintptr_t)&roomManager) + "\n").c_str());
-        it == roomManager.GetChatFrames().end();
-        VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, users);
-        return;
-    }
-    if (!it->second->IsReady())
-    {
-        OutputDebugStringA("ChatFrame not ready, caching voice update.\n");
-        VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, users);
-        return;
-    }
+    //if (it == chatFrames.end())
+    //{
+    //    OutputDebugStringA("it == roomManager.GetChatFrames().end()\n");
+    //    roomId;
+    //    OutputDebugStringA(("roomManager address: " + std::to_string((uintptr_t)&roomManager) + "\n").c_str());
+    //    it == roomManager.GetChatFrames().end();
+    //    VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, entries);
+    //    return;
+    //}
+    //if (!it->second->IsReady())
+    //{
+    //    OutputDebugStringA("ChatFrame not ready, caching voice update.\n");
+    //    VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, entries);
+    //    return;
+    //}
 
-    // UI 준비 완료 상태에서만 반영
-    VoiceChannelManager::GetInstance().UpdateVoiceUserList(roomId, users);
+    //// UI 준비 완료 상태에서만 반영
+    VoiceChannelManager::GetInstance().UpdateVoiceUserList(roomId, entries);
 }
 
 void ChatRoomManager::HandleRoomsInfoMessage(const std::string& msg)
@@ -290,20 +338,46 @@ void ChatRoomManager::HandleRoomsInfoMessage(const std::string& msg)
 
 	// 방 목록 수신 처리
 	// msg 예시: ROOMS_INFO:(roomName, password):(roomName, password) ...
+    // 이전 데이터를 지우고
+    roomsInfo.clear();
+
 	std::string msgData = msg.substr(strlen("ROOMS_INFO:"));
 
-	while (msgData.empty() == false)
-	{
-		size_t p1 = msgData.find(':');
-		size_t p2 = msgData.find(':', p1 + 1);
+    if (!msgData.empty() && msgData.back() == ':')
+        msgData.pop_back();
 
-		if (p1 == std::string::npos) break;
+    // 2) ':' 로 split
+    std::vector<std::string> tokens;
+    {
+        std::istringstream iss(msgData);
+        std::string tk;
+        while (std::getline(iss, tk, ':'))
+            tokens.push_back(tk);
+    }
 
-		std::string roomName = msgData.substr(0, p1); // 방 이름
-		std::string password = msgData.substr(p1 + 1, p2 - p1 - 1); // 방 비밀번호
-		roomsInfo[roomName] = password; // 방 이름과 비밀번호 저장
-		msgData.erase(0, p2); // 다음 메시지로 이동
-	}
+    // 짝수‑인덱스=방이름, 다음 인덱스=비밀번호
+    size_t i = 0;
+    for (; i + 1 < tokens.size(); i += 2)
+    {
+        roomsInfo[tokens[i]] = tokens[i + 1];  // 빈 문자열도 OK
+    }
+    // 토큰 개수가 홀수면 마지막 토큰은 방이름, 빈 비밀번호
+    if (i < tokens.size())
+    {
+        roomsInfo[tokens[i]] = "";
+    }
+	//while (msgData.empty() == false)
+	//{
+	//	size_t p1 = msgData.find(':');
+	//	size_t p2 = msgData.find(':', p1 + 1);
+
+	//	if (p1 == std::string::npos) break;
+
+	//	std::string roomName = msgData.substr(0, p1); // 방 이름
+	//	std::string password = msgData.substr(p1 + 1, p2 - p1 - 1); // 방 비밀번호
+	//	roomsInfo[roomName] = password; // 방 이름과 비밀번호 저장
+	//	msgData.erase(0, p2); // 다음 메시지로 이동
+	//}
 
 	if (roomListDialog)
 	{
