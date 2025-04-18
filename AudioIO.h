@@ -11,7 +11,7 @@
 #include <ws2tcpip.h>
 
 #define SAMPLE_RATE       (48000)
-#define FRAMES_PER_BUFFER (256) 
+#define FRAMES_PER_BUFFER (1024) 
 #define NUM_CHANNELS      (1)
 #define SAMPLE_FORMAT     paInt16
 
@@ -42,8 +42,8 @@ public:
     bool StartPlayback();  // 수신된 음성 재생 (UDP 수신)
     bool StopPlayback();
 
-    void SetMicMuted(bool muted) { micMuted = muted; }
-    void SetHeadsetMuted(bool muted) { headsetMuted = muted; }
+    void SetMicMuted(bool muted) { micMuted = !muted; }
+    void SetHeadsetMuted(bool muted) { headsetMuted = !muted; }
 
     void InitializeBuffers(); // 버퍼 초기화 함수
     void Cleanup();           // 자원 정리 함수
@@ -63,6 +63,7 @@ private:
 
     SAMPLE inputBuffer[FRAMES_PER_BUFFER];
     SAMPLE outputBuffer[FRAMES_PER_BUFFER];
+    SAMPLE silenceBuffer[FRAMES_PER_BUFFER] = { 0 };
 
     std::atomic<bool> capturing = false;
     std::atomic<bool> playing = false;
@@ -71,4 +72,6 @@ private:
 
     bool micMuted;
     bool headsetMuted;
+
+    float threshold = 0.1f; // 마이크 감도
 };

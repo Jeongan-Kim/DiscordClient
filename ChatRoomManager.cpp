@@ -63,6 +63,7 @@ void ChatRoomManager::OpenRoom(const std::string& roomId)
 
 void ChatRoomManager::CloseRoom(const std::string& roomId)
 {
+    
     auto it = chatFrames.find(roomId);
     if (it != chatFrames.end())
     {
@@ -267,11 +268,32 @@ void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
     // VOICE_LIST:roomId:user1,1,1;user2,1,0; ( 이름, 마이크, 헤드셋)
     size_t p1 = msg.find(':'); 
     size_t p2 = msg.find(':', p1 + 1);
-    if (p1 == std::string::npos || p2 == std::string::npos) return;
+    if (p1 == std::string::npos) return;
 
-    std::string roomId = msg.substr(p1 + 1, p2 - p1 - 1);
-    std::string userListStr = msg.substr(p2 + 1);
+    std::string roomId;
+    std::string userListStr;
 
+    if (p2 == std::string::npos)
+    {
+        // "VOICE_LIST:sd" 형태면 roomId만 있고 리스트는 빈 상태
+        roomId = msg.substr(p1 + 1);
+        userListStr.clear();
+    }
+    else 
+    {
+        // "VOICE_LIST:sd:...." 형태
+        roomId = msg.substr(p1 + 1, p2 - p1 - 1);
+        userListStr = msg.substr(p2 + 1);
+    }
+
+    // 끝에 "\n"이나 ";" 있으면 제거
+    while (!userListStr.empty() &&
+        (userListStr.back() == '\n' ||  userListStr.back() == '\r' ||   userListStr.back() == ';'))
+    {
+        userListStr.pop_back();
+    }
+
+    // 디버깅용
     std::istringstream ss(userListStr);
     std::string name;
     std::vector<std::string> users;
@@ -283,50 +305,54 @@ void ChatRoomManager::HandleVoiceListMessage(const std::string& msg)
         if (!name.empty()) 
             users.push_back(name);
     }
+    //
 
     // 2) ';' 로 split 해서 각 "userId, mic, headset" 토큰으로 분리
     std::vector<VoiceEntry> entries;
-    std::istringstream es(userListStr);
-    std::string item;
-    while (std::getline(es, item, ';')) {
-        if (item.empty()) continue;
 
-        // 3) 각 항목 내부를 ',' 로 split
-        std::istringstream fs(item);
-        std::string id, mic, head;
-        if (std::getline(fs, id, ',') &&
-            std::getline(fs, mic, ',') &&
-            std::getline(fs, head, ','))
-        {
-            entries.push_back({
-                id,
-                mic == "1",  // "1" 이면 on
-                head == "1"
-                });
+    if (!userListStr.empty())
+    {
+        std::istringstream es(userListStr);
+        std::string item;
+        while (std::getline(es, item, ';')) {
+            if (item.empty()) continue;
+
+            // 3) 각 항목 내부를 ',' 로 split
+            std::istringstream fs(item);
+            std::string id, mic, head;
+            if (std::getline(fs, id, ',') &&
+                std::getline(fs, mic, ',') &&
+                std::getline(fs, head, ','))
+            {
+                entries.push_back({
+                    id,
+                    mic == "1",  // "1" 이면 on
+                    head == "1"
+                    });
+            }
         }
-    }
-
+    } 
 
     // VoiceChannelManager에 유저 리스트 전달
 
     ChatRoomManager& roomManager = ChatRoomManager::GetInstance();
     auto& chatFrames = roomManager.GetChatFrames();
     auto it = chatFrames.find(roomId);
-    //if (it == chatFrames.end())
-    //{
-    //    OutputDebugStringA("it == roomManager.GetChatFrames().end()\n");
-    //    roomId;
-    //    OutputDebugStringA(("roomManager address: " + std::to_string((uintptr_t)&roomManager) + "\n").c_str());
-    //    it == roomManager.GetChatFrames().end();
-    //    VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, entries);
-    //    return;
-    //}
-    //if (!it->second->IsReady())
-    //{
-    //    OutputDebugStringA("ChatFrame not ready, caching voice update.\n");
-    //    VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, entries);
-    //    return;
-    //}
+    if (it == chatFrames.end())
+    {
+        OutputDebugStringA("it == roomManager.GetChatFrames().end()\n");
+        roomId;
+        OutputDebugStringA(("roomManager address: " + std::to_string((uintptr_t)&roomManager) + "\n").c_str());
+        it == roomManager.GetChatFrames().end();
+        //VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, entries);
+        return;
+    }
+    if (!it->second->IsReady())
+    {
+        OutputDebugStringA("ChatFrame not ready, caching voice update.\n");
+        //VoiceChannelManager::GetInstance().CachePendingVoiceUpdate(roomId, entries);
+        return;
+    }
 
     //// UI 준비 완료 상태에서만 반영
     VoiceChannelManager::GetInstance().UpdateVoiceUserList(roomId, entries);

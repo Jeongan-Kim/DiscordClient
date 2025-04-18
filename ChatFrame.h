@@ -29,6 +29,11 @@ public:
     bool GetMicStatus() { return micStatus; }
     bool GetHeadsetStatus() { return headsetStatus; }
 
+    void HighlightVoiceUser(std::string talker);
+    void OnExpireTimer(wxTimerEvent& evt);
+
+    int FindItemIndex(const std::string& clientId) const;
+
 private:
     ChatClient& client;
 	ChatRoomManager* roomManager; // 방 관리 객체
@@ -54,6 +59,10 @@ private:
 
 	wxListCtrl* chatChannelList; // 채팅창 참여자 목록
 	wxListCtrl* voiceChannelList; // 음성 채널 참여자 목록
+
+    std::unordered_map<std::string, wxTimer*> _clientTimers; // talker 회색 됐다가 다시 검정으로 돌아오는 시간    clientId->wxTimer*
+    std::unordered_map<int, std::string> _timerToClient;     // timerID->clientID
+    int _nextTimerId = 1;                                    // 타이머에 아이디 부여용 카운터
 
 	wxBitmapToggleButton* micToggle; // 마이크 토글 버튼
 	wxBitmapToggleButton* headsetToggle; // 헤드셋 토글 버튼

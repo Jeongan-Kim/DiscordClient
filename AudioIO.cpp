@@ -1,10 +1,10 @@
-#include "AudioIO.h"
+ï»¿#include "AudioIO.h"
 #include "ChatClient.h"
 #include "VoiceChannelManager.h"
 
-//¹æÇâ	                    IP	                Æ÷Æ®	            ¼³¸í
-//Å¬¶óÀÌ¾ğÆ® ¡æ ¼­¹ö	        ¼­¹ö IP	            50505	        ¸¶ÀÌÅ© ÀÔ·Â Àü¼Û
-//¼­¹ö ¡æ Å¬¶óÀÌ¾ğÆ®	        Å¬¶óÀÌ¾ğÆ® IP	    50506	        ½ºÇÇÄ¿ Ãâ·Â¿ë ¼ö½Å
+//ë°©í–¥	                    IP	                í¬íŠ¸	            ì„¤ëª…
+//í´ë¼ì´ì–¸íŠ¸ â†’ ì„œë²„	        ì„œë²„ IP	            50505	        ë§ˆì´í¬ ì…ë ¥ ì „ì†¡
+//ì„œë²„ â†’ í´ë¼ì´ì–¸íŠ¸	        í´ë¼ì´ì–¸íŠ¸ IP	    50506	        ìŠ¤í”¼ì»¤ ì¶œë ¥ìš© ìˆ˜ì‹ 
 static int passthroughCallback(const void* inputBuffer, void* outputBuffer,
     unsigned long framesPerBuffer,
     const PaStreamCallbackTimeInfo* timeInfo,
@@ -38,45 +38,45 @@ bool AudioIO::Init()
     PaError err = Pa_Initialize();
     if (err != paNoError)
     {
-        //std::cerr << "PortAudio ÃÊ±âÈ­ ½ÇÆĞ: " << Pa_GetErrorText(err) << std::endl;
-        OutputDebugStringA(("PortAudio ÃÊ±âÈ­ ½ÇÆĞ\n"));
+        //std::cerr << "PortAudio ì´ˆê¸°í™” ì‹¤íŒ¨: " << Pa_GetErrorText(err) << std::endl;
+        OutputDebugStringA(("PortAudio ì´ˆê¸°í™” ì‹¤íŒ¨\n"));
 
         return false;
     }
 
-    // ¿©±â¼± ¾Æ¹« ½ºÆ®¸²µµ ¿­Áö ¾ÊÀ½ (StartCapture, StartPlayback¿¡¼­ ¿­µµ·Ï ÇÔ)
+    // ì—¬ê¸°ì„  ì•„ë¬´ ìŠ¤íŠ¸ë¦¼ë„ ì—´ì§€ ì•ŠìŒ (StartCapture, StartPlaybackì—ì„œ ì—´ë„ë¡ í•¨)
     return true;
 }
 
 void AudioIO::StartTest()
 {
-    // ¿©±â¿£ ÀÏ´Ü °£´ÜÇÑ PassThrough ¿Àµğ¿À ½ºÆ®¸² Å×½ºÆ® ÄÚµå µé¾î°¥ ¿¹Á¤
+    // ì—¬ê¸°ì—” ì¼ë‹¨ ê°„ë‹¨í•œ PassThrough ì˜¤ë””ì˜¤ ìŠ¤íŠ¸ë¦¼ í…ŒìŠ¤íŠ¸ ì½”ë“œ ë“¤ì–´ê°ˆ ì˜ˆì •
     std::cout << "StartTest" << std::endl;
     PaError err;
 
     err = Pa_OpenDefaultStream(&inputStream,
-        NUM_CHANNELS,         // ÀÔ·Â Ã¤³Î ¼ö
-        NUM_CHANNELS,         // Ãâ·Â Ã¤³Î ¼ö
-        SAMPLE_FORMAT,        // »ùÇÃ Æ÷¸Ë
+        NUM_CHANNELS,         // ì…ë ¥ ì±„ë„ ìˆ˜
+        NUM_CHANNELS,         // ì¶œë ¥ ì±„ë„ ìˆ˜
+        SAMPLE_FORMAT,        // ìƒ˜í”Œ í¬ë§·
         SAMPLE_RATE,
         FRAMES_PER_BUFFER,
-        passthroughCallback,  // Äİ¹é ÇÔ¼ö
+        passthroughCallback,  // ì½œë°± í•¨ìˆ˜
         nullptr);             // userData
 
     if (err != paNoError) {
-        std::cerr << "Stream ¿­±â ½ÇÆĞ: " << Pa_GetErrorText(err) << std::endl;
+        std::cerr << "Stream ì—´ê¸° ì‹¤íŒ¨: " << Pa_GetErrorText(err) << std::endl;
 
         return;
     }
 
     err = Pa_StartStream(inputStream);
     if (err != paNoError) {
-        std::cerr << "Stream ½ÃÀÛ ½ÇÆĞ: " << Pa_GetErrorText(err) << std::endl;
+        std::cerr << "Stream ì‹œì‘ ì‹¤íŒ¨: " << Pa_GetErrorText(err) << std::endl;
 
         return;
     }
 
-    std::cout << "[AudioIO] ¸¶ÀÌÅ© ÀÔ·Â ¡æ ½ºÇÇÄ¿ Ãâ·Â Å×½ºÆ® Áß... (5ÃÊ°£)\n";
+    std::cout << "[AudioIO] ë§ˆì´í¬ ì…ë ¥ â†’ ìŠ¤í”¼ì»¤ ì¶œë ¥ í…ŒìŠ¤íŠ¸ ì¤‘... (5ì´ˆê°„)\n";
 
     std::this_thread::sleep_for(std::chrono::seconds(5));
 
@@ -103,7 +103,7 @@ void AudioIO::Terminate()
     Pa_Terminate();
 }
 
-// UDP ¼Û½Å ÇÔ¼ö
+// UDP ì†¡ì‹  í•¨ìˆ˜
 bool AudioIO::StartCapture()
 {
     if (inputStream == nullptr)
@@ -112,7 +112,7 @@ bool AudioIO::StartCapture()
             1, 0, SAMPLE_FORMAT, SAMPLE_RATE, FRAMES_PER_BUFFER, nullptr, nullptr);
         if (err != paNoError)
         {
-            std::string msg = "ÀÔ·Â ½ºÆ®¸² ¿­±â ½ÇÆĞ: ";
+            std::string msg = "ì…ë ¥ ìŠ¤íŠ¸ë¦¼ ì—´ê¸° ì‹¤íŒ¨: ";
             msg += Pa_GetErrorText(err);
             msg += "\n";  
             OutputDebugStringA(msg.c_str());
@@ -123,7 +123,7 @@ bool AudioIO::StartCapture()
         Pa_StartStream(inputStream);
     }
 
-    if (capturing) return false; // ÀÌ¹Ì ½ÇÇà ÁßÀÌ¸é ¹«½Ã
+    if (capturing) return false; // ì´ë¯¸ ì‹¤í–‰ ì¤‘ì´ë©´ ë¬´ì‹œ
     capturing = true;
 
     captureThread = std::thread([this]() 
@@ -131,7 +131,7 @@ bool AudioIO::StartCapture()
         SOCKET udpSocket = socket(AF_INET, SOCK_DGRAM, 0);
         if (udpSocket == INVALID_SOCKET)
         {
-            OutputDebugStringA("UDP ¼ÒÄÏ »ı¼º ½ÇÆĞ!\n");
+            OutputDebugStringA("UDP ì†Œì¼“ ìƒì„± ì‹¤íŒ¨!\n");
 
             capturing = false;
             return;
@@ -144,62 +144,64 @@ bool AudioIO::StartCapture()
         std::string serverIP = ChatClient::GetInstance().DiscoverServerIP();
         inet_pton(AF_INET, serverIP.c_str(), &serverAddr.sin_addr);
 
+
+        std::string roomId = VoiceChannelManager::GetInstance().GetCurrentVoiceRoomId();
+        std::string sender = ChatClient::GetInstance().GetNickname();
+        std::string header = "AUDIO:" + roomId + ":" + sender + ":";
+
+        size_t headerLen = header.size();
+        size_t audioLen = sizeof(inputBuffer);  // FRAMES_PER_BUFFER * sizeof(sample) ì˜¤ë””ì˜¤ ë°ì´í„° í¬ê¸°
+
+        std::vector<char> packet(headerLen + audioLen); //íŒ¨í‚· ë²„í¼ í• ë‹¹
+        memcpy(packet.data(), header.data(), header.size()); // í—¤ë” ë³µì‚¬
+
         while (capturing) 
         {
             PaError err = Pa_ReadStream(inputStream, inputBuffer, FRAMES_PER_BUFFER);
             if (err != paNoError)
             {
-                std::string msg = "¿Àµğ¿À ÀĞ±â ½ÇÆĞ: ";
+                std::string msg = "ì˜¤ë””ì˜¤ ì½ê¸° ì‹¤íŒ¨: ";
                 msg += Pa_GetErrorText(err);
                 msg += "\n";
                 OutputDebugStringA(msg.c_str());
-
-
                 continue;
             }
 
-            // »ùÇÃ °ª µğ¹ö±×
-            std::ostringstream oss;
-            oss << "[Capture] Sample[0~4]: ";
-            for (int i = 0; i < 5; ++i) {
-                oss << inputBuffer[i] << " ";
+            // í˜„ì¬ ë²„í¼ì˜ ìµœëŒ€ ì§„í­ ê³„ì‚°
+            float maxAmp = 0.0f;
+            for (int i = 0; i < FRAMES_PER_BUFFER; ++i) 
+            {
+                float a = fabsf(inputBuffer[i]);
+                if (a > maxAmp) maxAmp = a;
             }
-            oss << "\n";
-            OutputDebugStringA(oss.str().c_str());
+            // 16â€‘bit ê¸°ì¤€ ì •ê·œí™”
+            float norm = maxAmp / 32768.0f;
 
 
-			std::string roomId = VoiceChannelManager::GetInstance().GetCurrentVoiceRoomId();
-            std::string sender = ChatClient::GetInstance().GetNickname();
-            std::string header = "AUDIO:" + roomId + ":" + sender + ":";
 
-            size_t headerLen = header.size();
-            size_t audioLen = sizeof(inputBuffer);  // FRAMES_PER_BUFFER * sizeof(sample) ¿Àµğ¿À µ¥ÀÌÅÍ Å©±â
-            std::vector<char> packet(headerLen + audioLen); //ÆĞÅ¶ ¹öÆÛ ÇÒ´ç
-            memcpy(packet.data(), header.data(), headerLen); // Çì´õ º¹»ç
-            memcpy(packet.data() + headerLen,
-                reinterpret_cast<const char*>(inputBuffer),
-                audioLen); // ¿Àµğ¿À µ¥ÀÌÅÍ º¹»ç
-
-            if(micMuted) // ¸¶ÀÌÅ© ÄÑÁ® ÀÖÀ¸¸é Àü¼Û
-                sendto(udpSocket,  packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)); // UDP Àü¼Û
-
-            //int sent = sendto(udpSocket, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)); // UDP Àü¼Û
-
-            //if (sent == SOCKET_ERROR)
-            //{
-            //    int err = WSAGetLastError();
-            //    std::string msg = "[Capture] sendto error: ";
-            //    msg += std::to_string(err);
-            //    msg += "\n";
-            //    OutputDebugStringA(msg.c_str());
+            //// ìƒ˜í”Œ ê°’ ë””ë²„ê·¸
+            //std::ostringstream oss;
+            //oss << "[Capture] Sample[0~4]: ";
+            //for (int i = 0; i < 5; ++i) {
+            //    oss << inputBuffer[i] << " ";
             //}
-            //else
-            //{
-            //    std::string msg = "[Capture] sendto OK, bytes=";
-            //    msg += std::to_string(sent);
-            //    msg += "\n";
-            //    //OutputDebugStringA(msg.c_str());
-            //}
+            //oss << "\n";
+            //OutputDebugStringA(oss.str().c_str());
+
+            if (micMuted)    // ë§ˆì´í¬ êº¼ì ¸ ìˆìœ¼ë©´ ì „ì†¡ ì•ˆí•¨
+                continue;
+
+            // ì„¤ì •ëœ ì„ê³„ê°’(threshold) ë³´ë‹¤ ì‘ìœ¼ë©´ ë¬´ìŒìœ¼ë¡œë³´ë‚´ê¸°
+            if (norm < threshold)
+            {
+                memset(packet.data() + header.size(), 0, audioLen);
+            }
+            else
+            {
+                memcpy(packet.data() + headerLen, reinterpret_cast<const char*>(inputBuffer), audioLen); // ì˜¤ë””ì˜¤ ë°ì´í„° ë³µì‚¬                
+            }            
+            sendto(udpSocket, packet.data(), packet.size(), 0, reinterpret_cast<sockaddr*>(&serverAddr), sizeof(serverAddr)); // UDP ì „ì†¡
+
         }
 
         closesocket(udpSocket);
@@ -213,14 +215,14 @@ bool AudioIO::StopCapture()
     if (!capturing)
         return false;
 
-    // 1) Ä¸Ã³ ·çÇÁ¿¡ Å»Ãâ ½ÅÈ£ ÁÖ±â
+    // 1) ìº¡ì²˜ ë£¨í”„ì— íƒˆì¶œ ì‹ í˜¸ ì£¼ê¸°
     capturing = false;
 
-    // 2) ½º·¹µå°¡ ¾ÈÀüÇÏ°Ô Á¾·áµÉ ¶§±îÁö ´ë±â
+    // 2) ìŠ¤ë ˆë“œê°€ ì•ˆì „í•˜ê²Œ ì¢…ë£Œë  ë•Œê¹Œì§€ ëŒ€ê¸°
     if (captureThread.joinable())
         captureThread.join();
 
-    // 3) PortAudio ½ºÆ®¸² ´İ±â
+    // 3) PortAudio ìŠ¤íŠ¸ë¦¼ ë‹«ê¸°
     if (inputStream)
     {
         Pa_StopStream(inputStream);
@@ -239,7 +241,7 @@ bool AudioIO::StartPlayback()
             0, 1, SAMPLE_FORMAT, SAMPLE_RATE, FRAMES_PER_BUFFER, nullptr, nullptr);
         if (err != paNoError)
         {
-            std::string msg = "Ãâ·Â ½ºÆ®¸² ¿­±â ½ÇÆĞ: ";
+            std::string msg = "ì¶œë ¥ ìŠ¤íŠ¸ë¦¼ ì—´ê¸° ì‹¤íŒ¨: ";
             msg += Pa_GetErrorText(err);
             msg += "\n";
             OutputDebugStringA(msg.c_str());
@@ -250,40 +252,40 @@ bool AudioIO::StartPlayback()
         Pa_StartStream(outputStream);
     }
 
-    if (playing) return false;  // Áßº¹ ¹æÁö
+    if (playing) return false;  // ì¤‘ë³µ ë°©ì§€
     playing = true;
 
     playbackThread = std::thread([this]()
         {
-        OutputDebugStringA("[AudioIO] StartPlayback ½º·¹µå ½ÃÀÛµÊ\n");
+        OutputDebugStringA("[AudioIO] StartPlayback ìŠ¤ë ˆë“œ ì‹œì‘ë¨\n");
 
 
-        // UDP ¼ö½Å¿ë ¼ÒÄÏ
+        // UDP ìˆ˜ì‹ ìš© ì†Œì¼“
         playbackSocket = socket(AF_INET, SOCK_DGRAM, 0);
         if (playbackSocket == INVALID_SOCKET)
         {
-            OutputDebugStringA("UDP ¼ÒÄÏ »ı¼º ½ÇÆĞ!\n");
+            OutputDebugStringA("UDP ì†Œì¼“ ìƒì„± ì‹¤íŒ¨!\n");
 
             playing = false;
             return;
         }
 
-        // ¹ÙÀÎµùÇÒ Æ÷Æ® (¿¹: Å¬¶óÀÌ¾ğÆ® ¼ö½Å¿ë 50506)
+        // ë°”ì¸ë”©í•  í¬íŠ¸ (ì˜ˆ: í´ë¼ì´ì–¸íŠ¸ ìˆ˜ì‹ ìš© 50506)
         sockaddr_in localAddr{};
         localAddr.sin_family = AF_INET;
-        localAddr.sin_port = htons(50506);  // Å¬¶óÀÌ¾ğÆ® ¼ö½Å¿ë Æ÷Æ®
+        localAddr.sin_port = htons(50506);  // í´ë¼ì´ì–¸íŠ¸ ìˆ˜ì‹ ìš© í¬íŠ¸
         localAddr.sin_addr.s_addr = INADDR_ANY;
 
         if (bind(playbackSocket, (sockaddr*)&localAddr, sizeof(localAddr)) == SOCKET_ERROR)
         {
-            OutputDebugStringA("UDP ¹ÙÀÎµù ½ÇÆĞ!\n");
+            OutputDebugStringA("UDP ë°”ì¸ë”© ì‹¤íŒ¨!\n");
 
             closesocket(playbackSocket);
             playing = false;
             return;
         }
 
-        // µğ¹ö±×¿ë
+        // ë””ë²„ê·¸ìš©
         sockaddr_in locals;
         int len = sizeof(locals);
         getsockname(playbackSocket, (sockaddr*)&locals, &len);
@@ -297,63 +299,146 @@ bool AudioIO::StartPlayback()
         OutputDebugStringA(buf);
         //
 
-        // non-blocking ¸ğµå ¼³Á¤
+        // non-blocking ëª¨ë“œ ì„¤ì •
         //u_long mode = 1;
         //ioctlsocket(udpSocket, FIONBIO, &mode);
+         
+        // ìˆ˜ì‹  ì „ìš© í° ë°”ì´íŠ¸ ë²„í¼
+        constexpr int MAX_PACKET = 65507;
+        std::vector<char> packetBuf(MAX_PACKET);
+        SAMPLE outputBuffer[FRAMES_PER_BUFFER];
 
         while (playing)
         {
-            sockaddr_in fromAddr{};
-            int fromLen = sizeof(fromAddr);
-            int bytesReceived = recvfrom(playbackSocket, (char*)outputBuffer, sizeof(outputBuffer), 0,
-                (sockaddr*)&fromAddr, &fromLen);
+            //sockaddr_in fromAddr{};
+            //int fromLen = sizeof(fromAddr);
+            int rec = recvfrom(playbackSocket, packetBuf.data(), MAX_PACKET, 0,
+                nullptr, nullptr);
 
-            if (bytesReceived > 0)
-            {
-                int frames = bytesReceived / sizeof(SAMPLE);
-                if(headsetMuted) //Çìµå¼Â ÄÑÁ® ÀÖÀ¸¸é Àç»ı
-                    Pa_WriteStream(outputStream, outputBuffer, frames);
-                //PaError err = Pa_WriteStream(outputStream, outputBuffer, FRAMES_PER_BUFFER);
-                //if (err != paNoError)
-                //{
-                //    OutputDebugStringA("[AudioIO] Pa_WriteStream ½ÇÆĞ\n");
-                //}
+            if (rec == SOCKET_ERROR) {
+                int err = WSAGetLastError();
+
+                // ì—ëŸ¬ ë¡œê¹… í›„ ì¬ì‹œë„
+                char buf[128];
+                _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+                    "[AudioIO] recvfrom err=%d\n", err);
+                OutputDebugStringA(buf);
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                continue;
             }
 
-            // ³Ê¹« CPU ¾È Àâ¾Æ¸Ô°Ô Àá±ñ ½°
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            //if (rec <= 0)
+            //{
+            //    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            //    continue;
+            //}
+            
+             // â€œsender:â€¦â€ ì—ì„œ ':' ìœ„ì¹˜ ì°¾ê¸°
+            std::string hdr(packetBuf.data(), rec);
+            auto p1 = hdr.find(':');
+            if (p1 == std::string::npos) continue;
+
+            // senderÂ·PCM ë¶„ë¦¬
+            std::string sender = hdr.substr(0, p1);
+            int pcmOffset = p1 + 1;
+
+            if (rec > 0)
+            {
+                // pcmLenì€ FRAMES_PER_BUFFER*sizeof(SAMPLE) ì´ë¼ê³  ê°€ì •
+                std::memcpy(outputBuffer,
+                    packetBuf.data() + pcmOffset,
+                    FRAMES_PER_BUFFER * sizeof(SAMPLE));
+            }
+            else
+            {
+                // ë„¤íŠ¸ì›Œí¬ì—ì„œ ë°ì´í„°ê°€ ì•ˆ ì™”ê±°ë‚˜ ì—ëŸ¬ë©´ â†’ ë¬´ìŒ ì±„ìš°ê¸°
+                std::memcpy(outputBuffer,
+                    silenceBuffer,
+                    FRAMES_PER_BUFFER * sizeof(SAMPLE));
+            }
+
+            bool isSilent = true;
+            for (int i = 0; i < FRAMES_PER_BUFFER; ++i) {
+                if (outputBuffer[i] != 0) {
+                    isSilent = false;
+                    break;
+                }
+            }           
+
+            // ì¬ìƒ
+            if (!headsetMuted)
+            {
+                PaError err = Pa_WriteStream(
+                    outputStream,
+                    outputBuffer,
+                    FRAMES_PER_BUFFER);
+                if (err == paOutputUnderflowed)
+                {
+                    // ì–¸ë”í”Œë¡œìš° ë‚¬ì„ ë• ë°”ë¡œ ë¬´ìŒìœ¼ë¡œ ì±„ì›€
+                    Pa_WriteStream(outputStream,
+                        silenceBuffer,
+                        FRAMES_PER_BUFFER);
+                }
+                else if (err != paNoError)
+                {
+                    char buf[256];
+                    _snprintf_s(buf, sizeof(buf), _TRUNCATE,
+                        "[AudioIO] Pa_WriteStream failed: %s (%d)\n",
+                        Pa_GetErrorText(err), err);
+                    OutputDebugStringA(buf);
+                }
+            }
+
+            // ë¬´ìŒì´ ì•„ë‹ë•Œ, UIì— â€œsenderê°€ ë§í•˜ê³  ìˆë‹¤â€ ë°”ë¡œ ì•Œë¦¬ê¸°
+            if (!isSilent)
+            {
+                auto frame = VoiceChannelManager::GetInstance().GetCurrentVoiceFrame();
+                if (frame && frame->IsReady()) {
+                    frame->CallAfter([=]() {
+                        frame->HighlightVoiceUser(sender);
+                        });
+                }
+            }
+
+            
+
+
+            // ë„ˆë¬´ CPU ì•ˆ ì¡ì•„ë¨¹ê²Œ ì ê¹ ì‰¼
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
 
-        // ½º·¹µå Á¾·á Á÷Àü¿¡ ¼ÒÄÏ ´İ±â
+        // ìŠ¤ë ˆë“œ ì¢…ë£Œ ì§ì „ì— ì†Œì¼“ ë‹«ê¸°
         if (playbackSocket != INVALID_SOCKET)
         {
             closesocket(playbackSocket);
             playbackSocket = INVALID_SOCKET;
         }
-        OutputDebugStringA("[AudioIO] Playback ½º·¹µå Á¾·áµÊ\n");
+        OutputDebugStringA("[AudioIO] Playback ìŠ¤ë ˆë“œ ì¢…ë£Œë¨\n");
 
         });
+        // ì˜¤ë””ì˜¤ ì“°ë ˆë“œê°€ ì¶©ë¶„íˆ CPU ì‹œê°„ì„ ì–»ë„ë¡, ì“°ë ˆë“œ ìš°ì„ ìˆœìœ„ ë†’ì´ê¸°.
+        SetThreadPriority(playbackThread.native_handle(), THREAD_PRIORITY_HIGHEST);
 
     return true;
 }
 
 bool AudioIO::StopPlayback()
 {
-    // ÀÌ¹Ì playing=false ¶ó¸é ½º·¹µå°¡ °ğ ºüÁ®³ª¿Ã °ÍÀÔ´Ï´Ù
+    // ì´ë¯¸ playing=false ë¼ë©´ ìŠ¤ë ˆë“œê°€ ê³§ ë¹ ì ¸ë‚˜ì˜¬ ê²ƒì…ë‹ˆë‹¤
     playing = false;
 
-    // recvfrom() ºí·ÎÅ·À» ±ú±â À§ÇØ ¼ÒÄÏ °­Á¦ Á¾·á
+    // recvfrom() ë¸”ë¡œí‚¹ì„ ê¹¨ê¸° ìœ„í•´ ì†Œì¼“ ê°•ì œ ì¢…ë£Œ
     if (playbackSocket != INVALID_SOCKET)
     {
         closesocket(playbackSocket);
         playbackSocket = INVALID_SOCKET;
     }
 
-    // ½º·¹µå°¡ Á¾·áµÉ ¶§±îÁö ±â´Ù¸®±â
+    // ìŠ¤ë ˆë“œê°€ ì¢…ë£Œë  ë•Œê¹Œì§€ ê¸°ë‹¤ë¦¬ê¸°
     if (playbackThread.joinable())
         playbackThread.join();
 
-    // PortAudio ½ºÆ®¸² ´İ±â
+    // PortAudio ìŠ¤íŠ¸ë¦¼ ë‹«ê¸°
     if (outputStream)
     {
         Pa_StopStream(outputStream);
@@ -368,13 +453,13 @@ bool AudioIO::StopPlayback()
 
 void AudioIO::InitializeBuffers()
 {
-    std::memset(inputBuffer, 0, sizeof(float) * FRAMES_PER_BUFFER);  // inputBuffer ÃÊ±âÈ­
-    std::memset(outputBuffer, 0, sizeof(float) * FRAMES_PER_BUFFER); // outputBuffer ÃÊ±âÈ­
+    std::memset(inputBuffer, 0, sizeof(float) * FRAMES_PER_BUFFER);  // inputBuffer ì´ˆê¸°í™”
+    std::memset(outputBuffer, 0, sizeof(float) * FRAMES_PER_BUFFER); // outputBuffer ì´ˆê¸°í™”
 }
 
 void AudioIO::Cleanup()
 {
-    // PortAudio ½ºÆ®¸² Á¤¸®
+    // PortAudio ìŠ¤íŠ¸ë¦¼ ì •ë¦¬
     if (inputStream) {
         Pa_StopStream(inputStream);
         Pa_CloseStream(inputStream);
@@ -383,7 +468,7 @@ void AudioIO::Cleanup()
         Pa_StopStream(outputStream);
         Pa_CloseStream(outputStream);
     }
-    Pa_Terminate();  // PortAudio Á¾·á
+    Pa_Terminate();  // PortAudio ì¢…ë£Œ
 }
 
 

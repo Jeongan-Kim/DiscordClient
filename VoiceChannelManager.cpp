@@ -107,8 +107,8 @@ void VoiceChannelManager::UpdateVoiceUserList(const std::string& roomId, const s
     ChatFrame* targetFrame = it->second;
 
     // 3) UI 스레드에서 안전하게 호출
-    wxTheApp->CallAfter([=]() {
-        if (targetFrame->IsReady()) {
+    targetFrame->CallAfter([=]() {
+        if (targetFrame && targetFrame->IsReady()) {
             OutputDebugStringA("CallAfter: UpdateVoiceParticipantList 호출\n");
 
             targetFrame->UpdateVoiceParticipantList();

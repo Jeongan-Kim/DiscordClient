@@ -11,6 +11,7 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
 {
     OutputDebugStringA("ChatFrame 생성됨\n");
     Bind(wxEVT_CLOSE_WINDOW, &ChatFrame::OnClose, this); // 종료 이벤트 바인드
+    Bind(wxEVT_TIMER, &ChatFrame::OnExpireTimer, this);
 
     SetSize(wxSize(800, 600));
 
@@ -281,9 +282,77 @@ void ChatFrame::UpdateVoiceParticipantList()
         else if (!micOn && !headsetOn) imageIndex = 3;
 
         voiceChannelList->InsertItem(count, name, imageIndex);
+        voiceChannelList->SetItemTextColour(count, *wxLIGHT_GREY);
         count++;
     }
     voiceChannelLabel->SetLabel(wxString::Format("음성 채널 (%d명)", count));
+}
+
+void ChatFrame::HighlightVoiceUser(std::string talker)
+{
+    if (IsBeingDeleted() || !voiceChannelList)
+        return;
+
+    int idx = FindItemIndex(talker);
+    if (idx == wxNOT_FOUND) return;
+
+    // 말하고 있으면 검정
+    voiceChannelList->SetItemTextColour(idx, *wxBLACK);
+    voiceChannelList->RefreshItem(idx);
+
+    // ) 기존 타이머가 있으면 멈추고 삭제
+    auto itOld = _clientTimers.find(talker);
+    if (itOld != _clientTimers.end()) {
+        itOld->second->Stop();
+        delete itOld->second;
+        _clientTimers.erase(itOld);
+    }
+
+    // 새 타이머 생성 (ID 자동 할당)
+    int tid = _nextTimerId++;
+    wxTimer* t = new wxTimer(this, tid);
+    _clientTimers[talker] = t;
+    _timerToClient[tid] = talker;
+    t->StartOnce(500);  // 500ms 후에 한 번만 발동
+    
+    //voiceChannelList->Refresh();
+}
+
+void ChatFrame::OnExpireTimer(wxTimerEvent& evt)
+{
+    int tid = evt.GetId();               // 이 타이머의 ID
+    auto it = _timerToClient.find(tid);
+    if (it == _timerToClient.end()) return;
+
+    std::string clientId = it->second;
+    int idx = FindItemIndex(clientId);
+    if (idx != wxNOT_FOUND)
+    {
+        // 회색으로 돌려놓기
+        voiceChannelList->SetItemTextColour(idx, *wxLIGHT_GREY);
+        voiceChannelList->RefreshItem(idx);
+    }
+
+    // 타이머 정리
+    auto itTimer = _clientTimers.find(clientId);
+    if (itTimer != _clientTimers.end()) {
+        itTimer->second->Stop();
+        delete itTimer->second;
+        _clientTimers.erase(itTimer);
+    }
+
+    _timerToClient.erase(it);
+}
+
+int ChatFrame::FindItemIndex(const std::string& clientId) const
+{
+    for (int i = 0; i < voiceChannelList->GetItemCount(); ++i) 
+    {
+        if (voiceChannelList->GetItemText(i).ToStdString() == clientId
+            || voiceChannelList->GetItemText(i).ToStdString() == clientId + " (나)")
+            return i;
+    }
+    return wxNOT_FOUND;
 }
 
 void ChatFrame::UpdateJoinButtons()
@@ -331,6 +400,14 @@ void ChatFrame::OnSend(wxCommandEvent& event)
 void ChatFrame::OnClose(wxCloseEvent& event)
 {
     OutputDebugStringA("OnClose 호출됨\n");
+    // 모든 타이머 삭제
+    for (auto& [clientId, timer] : _clientTimers) {
+        timer->Stop();
+        delete timer;
+    }
+    _clientTimers.clear();
+    _timerToClient.clear();
+
 	VoiceChannelManager::GetInstance().LeaveVoiceChannel(this, roomId, client.GetNickname()); // 음성채널 나가기 처리
     // 퇴장 메시지 서버에 보내기
     roomManager->LeaveRoom(roomId);
