@@ -2,6 +2,7 @@
 #include <wx/wx.h>
 #include <wx/listctrl.h>
 #include <wx/imaglist.h>
+#include <wx/richtext/richtextctrl.h>
 #include <algorithm>
 #include <wx/tglbtn.h>
 #include "ChatClient.h"
@@ -43,9 +44,10 @@ private:
 	bool isInitialized = false; // 채팅창 레이아웃 초기화 여부(제대로 채팅창 생성이 완료되었는지)
 
     wxTextCtrl* chatDisplay; // 채팅창
-    wxTextCtrl* inputBox;  // 메시지 박스
-    //wxListCtrl* allParticipantList; // 참여자 목록 창
-    //wxStaticText* participantCountText; // 참여자 인원 수
+    //wxTextCtrl* inputBox;  // 메시지 박스
+    wxRichTextCtrl* inputBox;
+    wxButton* emoticonButton; // 이모티콘 버튼
+
     wxStaticText* chatChannelParticipantNum; // 참여자 인원 수
 
     wxImageList* participantIcons; // 아이콘 이미지 리스트(헤드셋, 마이크)
@@ -85,6 +87,7 @@ private:
 
     void UpdateJoinButtons();
 
+    void OnEmoticonButtonClick(wxCommandEvent& event);
     void OnVoiceJoinButtonClicked(wxCommandEvent& event);
     void OnVoiceLeaveButtonClicked(wxCommandEvent& event);
     void OnMicToggle(wxCommandEvent& event);

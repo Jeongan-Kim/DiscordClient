@@ -23,15 +23,20 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     wxBoxSizer* chatSizer = new wxBoxSizer(wxVERTICAL);
     chatDisplay = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(360, 180),
         wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH);
-    inputBox = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(260, 30), wxTE_PROCESS_ENTER);
+    inputBox = new wxRichTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(400, 30), wxTE_PROCESS_ENTER);
     inputBox->Bind(wxEVT_TEXT_ENTER, &ChatFrame::OnSend, this);
     wxButton* sendBtn = new wxButton(panel, wxID_ANY, "Send", wxDefaultPosition, wxSize(90, 30));
     sendBtn->Bind(wxEVT_BUTTON, &ChatFrame::OnSend, this);
+
+    emoticonButton = new wxButton(panel, wxID_ANY, "E", wxDefaultPosition, wxSize(30, 30));
+    emoticonButton->Bind(wxEVT_BUTTON, &ChatFrame::OnEmoticonButtonClick, this); // 이모티콘 창 생성
+
 
     // 채팅 구성요소 추가
     chatSizer->Add(chatDisplay, 1, wxEXPAND | wxALL, 5);
     chatSizer->Add(inputBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
     chatSizer->Add(sendBtn, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, 5);
+    chatSizer->Add(emoticonButton, 0, wxALIGN_RIGHT);
 
     // ------------------- 오른쪽: 참가자 패널 ---------------------
     wxBoxSizer* participantPanelSizer = new wxBoxSizer(wxVERTICAL);
@@ -68,7 +73,7 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     chatChannelList = new wxListCtrl(panel, wxID_ANY, wxDefaultPosition, wxSize(140, 100), wxLC_REPORT | wxLC_NO_HEADER | wxLC_SINGLE_SEL);
     chatChannelList->InsertColumn(0, "참여자", wxLIST_FORMAT_LEFT, 120);
 
-    chatChannelList->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &ChatFrame::OnParticipantRightClick, this);
+    //chatChannelList->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &ChatFrame::OnParticipantRightClick, this);
 
     chatChannelBox->Add(chatHeaderSizer, 0, wxEXPAND | wxBOTTOM, 5);
     chatChannelBox->Add(chatChannelList, 1, wxEXPAND);
@@ -89,7 +94,7 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     voiceChannelList->AssignImageList(participantIcons, wxIMAGE_LIST_SMALL);
     voiceChannelList->InsertColumn(0, "참여자", wxLIST_FORMAT_LEFT, 120);
 
-    voiceChannelList->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &ChatFrame::OnParticipantRightClick, this);
+    voiceChannelList->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &ChatFrame::OnParticipantRightClick, this); // 볼륨 조절 창 생성
 
     voiceChannelBox->Add(voiceHeaderSizer, 0, wxEXPAND | wxBOTTOM, 5);
     voiceChannelBox->Add(voiceChannelList, 1, wxEXPAND);
@@ -361,6 +366,61 @@ void ChatFrame::UpdateJoinButtons()
 	voiceJoinButton->Enable(!isInVoiceChannel);  // 음성 채널에 참가했으면 비활성화
 }
 
+void ChatFrame::OnEmoticonButtonClick(wxCommandEvent& event)
+{
+    wxDialog dlg(this, wxID_ANY, "이모티콘", wxDefaultPosition);
+    wxGridSizer* grid = new wxGridSizer(5, 5, 5, 5);
+    std::vector<std::pair<std::string, int>> emojis = 
+    {
+        {"angry", IDB_PNG_ANGRY},
+        {"confused", IDB_PNG_CONFUSED},
+        {"poop", IDB_PNG_POOP},
+        {"kiss", IDB_PNG_KISS},
+        {"frowning", IDB_PNG_FROWNING},
+        {"grinning", IDB_PNG_GRINNING},
+        {"grinningsweat", IDB_PNG_GRINNING_SWEAT},
+        {"grinningwink", IDB_PNG_GRINNING_WINK},
+        {"rollsmile", IDB_PNG_ROLL_SMILE},
+        {"smile", IDB_PNG_SMILE},
+        {"smileheart", IDB_PNG_SMILE_HEART},
+        {"tired", IDB_PNG_TIRED}
+    };
+
+    for (auto& [name, resId] : emojis) {
+        wxImage img = LoadPngFromResource(resId);
+        img.Rescale(16, 16, wxIMAGE_QUALITY_HIGH);
+
+        wxBitmap bmp(img);
+
+        // 2) 버튼 생성
+        wxBitmapButton* btn =
+            new wxBitmapButton(&dlg, wxID_ANY, bmp,
+                wxDefaultPosition, wxDefaultSize,
+                wxBORDER_NONE);
+
+        // 3) 람다에 dlg를 참조 캡처
+        btn->Bind(wxEVT_BUTTON,
+            [this, name, &dlg, bmp](wxCommandEvent&)
+            {
+                // 선택된 이모티콘 이름을 입력창에 삽입
+                //inputBox->WriteText(":" + name + ":");
+                long pos = inputBox->GetInsertionPoint();
+                inputBox->Freeze();
+                inputBox->WriteImage(bmp);
+                inputBox->WriteText(" ");
+                inputBox->Thaw();
+                inputBox->SetFocus();
+                inputBox->SetInsertionPoint(pos + 1);
+                // 모달 다이얼로그 닫기
+                dlg.EndModal(wxID_OK);
+            });
+
+        grid->Add(btn, 0, wxEXPAND);
+    }
+    dlg.SetSizerAndFit(grid);
+    dlg.ShowModal();
+}
+
 void ChatFrame::OnVoiceJoinButtonClicked(wxCommandEvent& event)
 {    
     OutputDebugStringA(("OnVoiceJoinButtonClicked" + roomId + "\n").c_str());
@@ -388,6 +448,7 @@ void ChatFrame::OnSend(wxCommandEvent& event)
     wxString msg = inputBox->GetValue();
     if (!msg.IsEmpty()) 
     {
+        // TODO: 이모지인 경우 서버에 다르게 보내기
 		std::string message = roomId + ":" + client.GetNickname() + ":" + std::string(msg.mb_str());
 		client.Send(message); // 메시지 전송
         //client.Send(std::string(msg.mb_str()));
@@ -503,14 +564,76 @@ void ChatFrame::OnHeadsetToggle(wxCommandEvent& event)
 void ChatFrame::OnParticipantRightClick(wxListEvent& event) {
     long itemIndex = event.GetIndex();
     wxString username = voiceChannelList->GetItemText(itemIndex);
+    std::string clientId = voiceChannelList->GetItemText(itemIndex).ToStdString();
 
-    wxDialog* volumeDialog = new wxDialog(this, wxID_ANY, username + " 볼륨 조절", wxDefaultPosition, wxSize(200, 100));
-    wxSlider* volumeSlider = new wxSlider(volumeDialog, wxID_ANY, 50, 0, 100);
+    wxDialog* volumeDialog = new wxDialog(this, wxID_ANY, username + " 볼륨 조절", wxDefaultPosition, wxSize(250, 140));
+    wxSlider* volumeSlider = new wxSlider(volumeDialog, wxID_ANY, int(VoiceChannelManager::GetInstance().GetParticipantVolume(roomId, clientId) * 100), 0, 100, wxDefaultPosition, wxSize(200, -1), wxSL_HORIZONTAL | wxSL_LABELS);
 
     wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
     sizer->Add(volumeSlider, 1, wxALL | wxEXPAND, 10);
+
+    wxCheckBox* chkMute = new wxCheckBox(volumeDialog, wxID_ANY, "음소거");
+    chkMute->SetValue(VoiceChannelManager::GetInstance().IsParticipantMuted(roomId, clientId));
+    sizer->Add(chkMute, 0, wxALL | wxALIGN_CENTER, 5);
+
     volumeDialog->SetSizerAndFit(sizer);
+
+    // 2) 슬라이더 이벤트 → 설정 저장
+    volumeSlider->Bind(wxEVT_SLIDER, [=](wxCommandEvent& e) {
+        float vol = e.GetInt() / 100.0f;
+        VoiceChannelManager::GetInstance()
+            .SetParticipantVolume(roomId, clientId, vol);
+        });
+
+    // 3) 체크박스 이벤트 → 음소거 설정
+    chkMute->Bind(wxEVT_CHECKBOX, [=](wxCommandEvent& e) {
+        bool mute = e.IsChecked();
+        VoiceChannelManager::GetInstance()
+            .SetParticipantMute(roomId, clientId, mute);
+        });
+
     volumeDialog->ShowModal();
+
+
+
+    //long idx = event.GetIndex();
+    //std::string clientId = voiceChannelList->GetItemText(idx).ToStdString();
+    //std::string title = clientId + " 볼륨/뮤트";
+
+    // 1) 다이얼로그 + 컨트롤 생성
+    //wxDialog dialog(this, wxID_ANY, title, wxDefaultPosition, wxSize(250, 140));
+    //wxBoxSizer* s = new wxBoxSizer(wxVERTICAL);
+
+    // 볼륨 슬라이더
+    //wxSlider* slider = new wxSlider(&dialog, wxID_ANY, int(VoiceChannelManager::GetInstance().GetParticipantVolume(roomId, clientId) * 100), 0, 100, wxDefaultPosition, wxSize(200, -1), wxSL_HORIZONTAL | wxSL_LABELS);
+    //s->Add(slider, 0, wxALL | wxALIGN_CENTER, 10);
+
+    // 음소거 체크박스
+    //wxCheckBox* chkMute = new wxCheckBox(&dialog, wxID_ANY, "음소거");
+    //chkMute->SetValue(VoiceChannelManager::GetInstance().IsParticipantMuted(roomId, clientId));
+    //s->Add(chkMute, 0, wxALL | wxALIGN_CENTER, 5);
+
+    // 확인/취소 버튼
+    //s->Add(dialog.CreateSeparatedButtonSizer(wxOK | wxCANCEL),  0, wxEXPAND | wxALL, 10);
+
+    //dialog.SetSizerAndFit(s);
+
+    // 2) 슬라이더 이벤트 → 설정 저장
+    //slider->Bind(wxEVT_SLIDER, [=](wxCommandEvent& e) {
+    //    float vol = e.GetInt() / 100.0f;
+    //    VoiceChannelManager::GetInstance()
+    //        .SetParticipantVolume(roomId, clientId, vol);
+    //    });
+
+    //// 3) 체크박스 이벤트 → 음소거 설정
+    //chkMute->Bind(wxEVT_CHECKBOX, [=](wxCommandEvent& e) {
+    //    bool mute = e.IsChecked();
+    //    VoiceChannelManager::GetInstance()
+    //        .SetParticipantMute(roomId, clientId, mute);
+    //    });
+
+    //dialog.ShowModal();
+    //dialog.Destroy();
 }
 
 void ChatFrame::OnSetProfilePic(wxCommandEvent& event)

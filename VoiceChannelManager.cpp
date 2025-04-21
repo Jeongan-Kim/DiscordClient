@@ -161,6 +161,35 @@ ChatFrame* VoiceChannelManager::GetCurrentVoiceFrame() const {
     return currentVoiceFrame;
 }
 
+void VoiceChannelManager::SetParticipantVolume(const std::string& roomId, const std::string& clientId, float vol)
+{
+    participantsAudioSettings[roomId][clientId].volume = vol;
+}
+
+float VoiceChannelManager::GetParticipantVolume(const std::string& roomId, const std::string& clientId) const
+{
+    auto rit = participantsAudioSettings.find(roomId);
+    if (rit == participantsAudioSettings.end()) return 1.0f;
+    auto cit = rit->second.find(clientId);
+    if (cit == rit->second.end()) return 1.0f;
+    return cit->second.volume;
+}
+
+void VoiceChannelManager::SetParticipantMute(const std::string& roomId, const std::string& clientId, bool mute)
+{
+    participantsAudioSettings[roomId][clientId].muted = mute;
+}
+
+bool VoiceChannelManager::IsParticipantMuted(const std::string& roomId, const std::string& clientId) const
+{
+    auto rit = participantsAudioSettings.find(roomId);
+    if (rit == participantsAudioSettings.end()) return false;
+
+    auto cit = rit->second.find(clientId);
+    if (cit == rit->second.end()) return false;
+    return cit->second.muted;
+}
+
 std::vector<VoiceEntry> VoiceChannelManager::GetUsersInVoice(const std::string& roomId) const
 {
     std::vector<VoiceEntry> result;

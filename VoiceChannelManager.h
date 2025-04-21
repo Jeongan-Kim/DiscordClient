@@ -13,6 +13,11 @@
 // 버튼 상태 동기화(마이크, 헤드셋) : 음성 채널에 속한 방에는 버튼 활성화, 나머지 방은 비활성화
 // ChatFrame UI에 알림 : 버튼 상태나 참가자 표시 업데이트
 //class AudioIO; // AudioIO 클래스 전방 선언
+struct ParticipantAudioSettings
+{
+	float volume = 1.0f;
+	bool muted = false;
+};
 
 class VoiceChannelManager {
 public:
@@ -37,6 +42,11 @@ public:
 	std::string GetCurrentVoiceRoomId() const { return currentVoiceRoomId; } // 현재 음성 채널 ID 반환
 	ChatFrame* GetCurrentVoiceFrame() const; // 현재 음성 채널 참가 중인 프레임 반환
 
+	void SetParticipantVolume(const std::string& roomId, const std::string& clientId, float vol);
+	float GetParticipantVolume(const std::string& roomId, const std::string& clientId) const;
+	void  SetParticipantMute(const std::string& roomId, const std::string& clientId, bool mute);
+	bool  IsParticipantMuted(const std::string& roomId, const std::string& clientId) const;
+
 private:
 	//AudioIO* audioIO = nullptr; // AudioIO 객체 포인터
 
@@ -52,4 +62,5 @@ private:
 	std::unordered_map<std::string, ChatFrame*> userFrames;
 
 	std::unordered_map<std::string, std::vector<std::string>> pendingVoiceUpdates; // 대기 중인 음성 채널 업데이트(준비 안돼서 업데이트 못한 것들)
+	std::unordered_map<std::string, std::unordered_map<std::string, ParticipantAudioSettings>> participantsAudioSettings;
 };

@@ -363,7 +363,25 @@ bool AudioIO::StartPlayback()
                     isSilent = false;
                     break;
                 }
-            }           
+            }    
+
+            std::string roomId = VoiceChannelManager::GetInstance().GetCurrentVoiceRoomId();
+            float vol = VoiceChannelManager::GetInstance()
+                .GetParticipantVolume(roomId, sender);
+            bool mute = VoiceChannelManager::GetInstance()
+                .IsParticipantMuted(roomId, sender);
+
+            // 2) 볼륨·뮤트 적용
+            if (mute) {
+                // 완전 무음
+                std::memset(outputBuffer, 0, FRAMES_PER_BUFFER * sizeof(SAMPLE));
+            }
+            else if (vol != 1.0f) {
+                // 샘플마다 곱해 줍니다
+                for (int i = 0; i < FRAMES_PER_BUFFER; ++i) {
+                    outputBuffer[i] = static_cast<SAMPLE>(outputBuffer[i] * vol);
+                }
+            }
 
             // 재생
             if (!headsetMuted)
