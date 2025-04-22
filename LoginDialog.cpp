@@ -39,6 +39,11 @@ LoginDialog::LoginDialog(wxWindow* parent)
 
     // 회원가입 버튼 처리
     signupBtn->Bind(wxEVT_BUTTON, [=](wxCommandEvent&) { AttemptRegister(); });
+
+    idCtrl->SetFocus();
+    // 한영키 토글
+    keybd_event(VK_HANGUL, 0, 0, 0);
+    keybd_event(VK_HANGUL, 0, KEYEVENTF_KEYUP, 0);
 }
 
 void LoginDialog::AttemptLogin()

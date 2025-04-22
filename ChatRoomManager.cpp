@@ -164,17 +164,17 @@ void ChatRoomManager::HandleRoomMessage(const std::string& msg)
     std::string hour = data.substr(p1 + 1, p2 - p1 - 1);
     std::string minute = data.substr(p2 + 1, p3 - p2 - 1);
     std::string sender = data.substr(p3 + 1, p4 - p3 - 1);
-    std::string content = data.substr(p4 + 1);
+    std::string contentUtf8 = data.substr(p4 + 1);
 
-    std::string timeStr = hour + ":" + minute;
-    
-	std::string message = "[" + timeStr + "] " + sender + ": " + content;
+    //std::string timeStr = hour + ":" + minute;    
+	//std::string message = "[" + timeStr + "] " + sender + ": " + content;
 
     if (chatFrames.count(roomId)) // 방이 열려있다면
     {
+        wxString content = wxString::FromUTF8(contentUtf8);
         wxTheApp->CallAfter([=]
             {
-                chatFrames[roomId]->AppendMessage(sender, message); // 메시지 추가
+                chatFrames[roomId]->AppendMessage(hour, minute, sender, content); // 메시지 추가
             });
     }
 
@@ -210,7 +210,7 @@ void ChatRoomManager::HandleSystemMessage(const std::string& msg)
     {
         ChatFrame* frame = it->second;
         wxTheApp->CallAfter([=] {
-            frame->AppendMessage("SYSTEM", content);
+            frame->AppendMessage("", "", "SYSTEM", content);
             });
     }
     else

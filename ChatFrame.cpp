@@ -2,9 +2,20 @@
 #include "ChatRoomManager.h" 
 #include "ResourceLoader.h"
 #include "resource.h"
+#include "AudioIO.h"
 #include <algorithm>
 #include <wx/filedlg.h>
-#include "AudioIO.h"
+#include <wx/regex.h>
+#include <wx/popupwin.h>
+#include <wx/stattext.h>
+#include <wx/sizer.h>
+#include <wx/display.h>
+#include <wx/graphics.h>
+#include <wx/dcbuffer.h>
+
+wxBEGIN_EVENT_TABLE(ChatFrame, wxFrame)
+EVT_ACTIVATE(ChatFrame::OnActivate)
+wxEND_EVENT_TABLE()
 
 ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow* parent, ChatRoomManager* manager)
 	: wxFrame(parent, wxID_ANY, roomId), client(clientInst), roomId(roomId), roomManager(manager)
@@ -21,9 +32,11 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
 
     // ------------------- 왼쪽: 채팅 구성 ---------------------
     wxBoxSizer* chatSizer = new wxBoxSizer(wxVERTICAL);
-    chatDisplay = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(360, 180),
-        wxTE_MULTILINE | wxTE_READONLY | wxTE_RICH);
-    inputBox = new wxRichTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(400, 30), wxTE_PROCESS_ENTER);
+    chatDisplay = new wxRichTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(360, 180), wxRE_MULTILINE | wxRE_READONLY);
+    chatDisplay->Bind(wxEVT_TEXT_URL, &ChatFrame::OnURLClick, this); // 링크인 경우 누르면 OnURLClick 호출
+
+    wxBoxSizer* inputRowSizer = new wxBoxSizer(wxHORIZONTAL);
+    inputBox = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxSize(400, 30), wxTE_MULTILINE | wxTE_PROCESS_ENTER);
     inputBox->Bind(wxEVT_TEXT_ENTER, &ChatFrame::OnSend, this);
     wxButton* sendBtn = new wxButton(panel, wxID_ANY, "Send", wxDefaultPosition, wxSize(90, 30));
     sendBtn->Bind(wxEVT_BUTTON, &ChatFrame::OnSend, this);
@@ -31,12 +44,13 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     emoticonButton = new wxButton(panel, wxID_ANY, "E", wxDefaultPosition, wxSize(30, 30));
     emoticonButton->Bind(wxEVT_BUTTON, &ChatFrame::OnEmoticonButtonClick, this); // 이모티콘 창 생성
 
+    inputRowSizer->Add(inputBox, 1, wxEXPAND | wxALL, 5);
+    inputRowSizer->Add(emoticonButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    inputRowSizer->Add(sendBtn, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
 
     // 채팅 구성요소 추가
     chatSizer->Add(chatDisplay, 1, wxEXPAND | wxALL, 5);
-    chatSizer->Add(inputBox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 5);
-    chatSizer->Add(sendBtn, 0, wxALIGN_RIGHT | wxRIGHT | wxBOTTOM, 5);
-    chatSizer->Add(emoticonButton, 0, wxALIGN_RIGHT);
+    chatSizer->Add(inputRowSizer, 0, wxEXPAND);
 
     // ------------------- 오른쪽: 참가자 패널 ---------------------
     wxBoxSizer* participantPanelSizer = new wxBoxSizer(wxVERTICAL);
@@ -146,6 +160,8 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     mainSizer->Add(participantPanelSizer, 0, wxEXPAND | wxALL, 5);
     panel->SetSizer(mainSizer);
 
+    chatDisplay->SetBackgroundColour(*wxWHITE);
+    chatDisplay->SetOwnBackgroundColour(*wxWHITE);
 
 	//// 참여자 목록에 마우스 오른쪽 클릭 이벤트 바인드(음량 조절)
     //   participantList->Bind(wxEVT_LIST_ITEM_RIGHT_CLICK, &ChatFrame::OnParticipantRightClick, this);
@@ -156,6 +172,10 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
 	// 마이크, 헤드셋 토글 버튼 초기화(꺼놓기)
     UpdateVoiceControlsState(false);
 
+    inputBox->SetFocus();
+    // 한영키 토글
+    keybd_event(VK_HANGUL, 0, 0, 0);
+    keybd_event(VK_HANGUL, 0, KEYEVENTF_KEYUP, 0);
 }
 
 void ChatFrame::MarkInitialized()
@@ -172,39 +192,146 @@ void ChatFrame::MarkInitialized()
     //}
 }
 
-void ChatFrame::AppendMessage(const std::string& sender, const std::string& text)
+void ChatFrame::AppendMessage(const std::string& hour, const std::string& minute, const std::string& sender, const wxString& text)
 {
+    chatDisplay->Freeze();
+    chatDisplay->SetBackgroundColour(*wxWHITE);
+    chatDisplay->SetOwnBackgroundColour(*wxWHITE);
+
+    //메시지 스타일(기본)
+    wxTextAttr baseMsgStyle = GetStyleForMessage(sender, client.GetNickname(), "MESSAGE");
+
+
     if (sender == "SYSTEM")
     {
         wxTextAttr systemStyle = GetStyleForMessage("SYSTEM", client.GetNickname(), "SYSTEM");
         chatDisplay->SetDefaultStyle(systemStyle);
-        chatDisplay->AppendText(wxString(text + "\n"));
+        chatDisplay->WriteText(text + "\n");
+
+        chatDisplay->SetDefaultStyle(baseMsgStyle);  // 기본 스타일 리셋
+        chatDisplay->Thaw();
         return;
     }
 
-    // 예: "[16:24] 정안: 안녕하세요~"
-    size_t bracketClose = text.find("]");
-    std::string timeStr = text.substr(0, bracketClose + 1);           // "[16:24]"
-    std::string remaining = text.substr(bracketClose + 2);            // "정안: 안녕하세요~"
-    size_t colonPos = remaining.find(':');
-    std::string namePart = remaining.substr(0, colonPos + 1);         // "정안:"
-    std::string messagePart = remaining.substr(colonPos + 2);         // "안녕하세요~"
+    // 예: "[16:24] 정안: (이모티콘)안녕하세요~"
+
+    wxString timeStr = "[" + wxString(hour) + ":" + wxString(minute) + "]";           // "[16:24]"
+    std::string namePart = sender;
 
     // 시간 스타일
     wxTextAttr timeStyle = GetStyleForMessage(sender, client.GetNickname(), "TIME");
     chatDisplay->SetDefaultStyle(timeStyle);
-    chatDisplay->AppendText(wxString(timeStr + " "));
+    chatDisplay->WriteText(timeStr + " ");
 
     // 이름 스타일
     wxTextAttr nameStyle = GetStyleForMessage(sender, client.GetNickname(), "NAME");
     chatDisplay->SetDefaultStyle(nameStyle);
-    chatDisplay->AppendText(wxString(namePart + " "));
+    chatDisplay->WriteText(wxString(namePart + " "));
 
-    // 메시지 스타일
-    wxTextAttr msgStyle = GetStyleForMessage(sender, client.GetNickname(), "MESSAGE");
-    chatDisplay->SetDefaultStyle(msgStyle);
-    chatDisplay->AppendText(wxString(messagePart + "\n"));
-    
+
+
+
+    // URL 또는 :token: 패턴 (wxString에서 바로 쓰는 UTF‑8 리터럴)
+    wxRegEx re(
+        R"((https?://[^ ]+)|:([A-Za-z0-9_+\-]+):)",
+        wxRE_ADVANCED | wxRE_ICASE
+    );
+
+    if (!re.IsValid())
+    {
+        // regex 컴파일 실패 시 그냥 일반 텍스트
+        chatDisplay->WriteText(text);
+        chatDisplay->Newline();
+        chatDisplay->Thaw();
+        return;
+    }
+
+    // 2) content 파싱
+    wxString msg = text;
+    size_t globalPos = 0/*, len = text.Length()*/;
+    size_t start, len;
+
+    // 2) 이모티콘(:token:) 또는 URL(http:// or https://) 패턴을 하나로 매치
+   // re.Matches(text, flags, startpos) 로 루프
+    while (re.Matches(msg))
+    {
+        // 전체 매치 위치 얻기 (index=0)
+        re.GetMatch(&start, &len, 0);
+
+        // 매치 전 일반 텍스트
+        if (start > 0)
+        {
+            chatDisplay->SetDefaultStyle(baseMsgStyle);
+            chatDisplay->WriteText(text.Mid(0, start));
+        }
+
+        // 1) URL 그룹(1) 확인
+        wxString url = re.GetMatch(msg, 1);
+        wxString token = re.GetMatch(msg, 2);
+
+        if (!url.IsEmpty())
+        {
+            wxTextAttr urlStyle = GetStyleForMessage(sender, client.GetNickname(), "URL");
+            chatDisplay->SetDefaultStyle(urlStyle);
+
+            chatDisplay->BeginURL(url);
+            chatDisplay->WriteText(url);
+            chatDisplay->EndURL();
+
+            // 반드시 스타일 복구
+            chatDisplay->SetDefaultStyle(baseMsgStyle);
+        }
+        else if(!token.IsEmpty())
+        {
+            // 2) 이모티콘 그룹(2)
+
+            auto itEmoji = emojiRes.find(std::string(token.utf8_str()));
+            if (itEmoji != emojiRes.end())
+            {
+                wxImage img = LoadPngFromResource(itEmoji->second);
+                if (img.IsOk())
+                {
+                    img.Rescale(16, 16, wxIMAGE_QUALITY_HIGH);                   
+                    chatDisplay->WriteImage(wxBitmap(img));
+                }
+                else
+                {
+                    chatDisplay->SetDefaultStyle(baseMsgStyle);
+                    chatDisplay->WriteText(":" + token + ":");
+                }
+            }
+            else
+            {
+                chatDisplay->SetDefaultStyle(baseMsgStyle);
+                chatDisplay->WriteText(":" + token + ":");
+            }
+        }
+
+        // 다음 검색 위치로 이동
+        msg = msg.Mid(start + len);
+        globalPos += start + len;
+    }
+   
+
+    // 남은 일반 텍스트
+    if (!msg.IsEmpty())
+    {
+        // 메시지 스타일
+        chatDisplay->SetDefaultStyle(baseMsgStyle);
+        chatDisplay->WriteText(msg);
+    }
+
+    chatDisplay->Newline();
+    chatDisplay->SetDefaultStyle(baseMsgStyle); // 이걸 호출하면 배경은 컨트롤의 기본(위에서 흰색으로 고정)으로 돌아갑니다
+    chatDisplay->Thaw();
+
+    if (!IsIconized() || isActive) // 현재 창이 최소화되어 있거나, 활성 상태가 아니면
+    {
+        // 방 이름(roomId)이나 발신자(sender) 등을 포함해서
+        wxString note = wxString::Format( "%s: %s", roomId, text.Left(30) + wxT("…"));
+        
+        ShowNotification(roomId, sender, text.Left(30));
+    }
 }
 
 void ChatFrame::UpdateUserList(const std::vector<std::string>& users) 
@@ -366,6 +493,20 @@ void ChatFrame::UpdateJoinButtons()
 	voiceJoinButton->Enable(!isInVoiceChannel);  // 음성 채널에 참가했으면 비활성화
 }
 
+void ChatFrame::OnURLClick(wxTextUrlEvent& event)
+{
+    // 1) URL의 시작·끝 인덱스 가져오기
+    long start = event.GetURLStart();
+    long end = event.GetURLEnd();
+
+    // 2) 채팅 컨트롤에서 해당 범위의 문자열(=URL) 추출
+    wxString url = chatDisplay->GetRange(start, end + 1);
+    // ※ GetRange의 끝 인덱스는 inclusive이므로 +1
+
+    // 3) 기본 브라우저로 열기
+    wxLaunchDefaultBrowser(url);
+}
+
 void ChatFrame::OnEmoticonButtonClick(wxCommandEvent& event)
 {
     wxDialog dlg(this, wxID_ANY, "이모티콘", wxDefaultPosition);
@@ -399,18 +540,22 @@ void ChatFrame::OnEmoticonButtonClick(wxCommandEvent& event)
                 wxBORDER_NONE);
 
         // 3) 람다에 dlg를 참조 캡처
-        btn->Bind(wxEVT_BUTTON,
-            [this, name, &dlg, bmp](wxCommandEvent&)
-            {
-                // 선택된 이모티콘 이름을 입력창에 삽입
-                //inputBox->WriteText(":" + name + ":");
-                long pos = inputBox->GetInsertionPoint();
+        btn->Bind(wxEVT_BUTTON, [this, name, &dlg, bmp, img](wxCommandEvent&)
+            {                                
+                long pos = inputBox->GetInsertionPoint();// 현재 커서 위치
+                //wxRichTextImageBlock block;
+                //block.MakeImageBlockDefaultQuality(img, wxBITMAP_TYPE_PNG); // 이미지 블록 만들고 삽입
+                wxString token = ":" + name + ":";
+
                 inputBox->Freeze();
-                inputBox->WriteImage(bmp);
+                //inputBox->WriteImage(block);
+                inputBox->WriteText(token);
                 inputBox->WriteText(" ");
                 inputBox->Thaw();
-                inputBox->SetFocus();
-                inputBox->SetInsertionPoint(pos + 1);
+                
+                EmojiInfo info = { pos, 1, name };
+                insertEmojis.push_back(info); // 삽입 위치와 길이, 이름을 기록
+
                 // 모달 다이얼로그 닫기
                 dlg.EndModal(wxID_OK);
             });
@@ -445,16 +590,46 @@ void ChatFrame::OnInitLayout()
 void ChatFrame::OnSend(wxCommandEvent& event)
 {
 	// [roomId]:[sender]:[message] 형식으로 메시지 전송
-    wxString msg = inputBox->GetValue();
-    if (!msg.IsEmpty()) 
-    {
-        // TODO: 이모지인 경우 서버에 다르게 보내기
-		std::string message = roomId + ":" + client.GetNickname() + ":" + std::string(msg.mb_str());
-		client.Send(message); // 메시지 전송
-        //client.Send(std::string(msg.mb_str()));
+    std::string sender = client.GetNickname();
 
-        inputBox->Clear();
-    }
+    wxString text = inputBox->GetValue(); //순수 텍스트 가져오기(placeholder 공백 들어있음)
+    if (text.IsEmpty()) return;
+
+    //std::sort(insertEmojis.begin(), insertEmojis.end(), [](auto& a, auto& b) { return a.pos < b.pos; }); //이모티콘 맵핑을 오름차순으로 정렬(맨 앞 이모티콘부터 토큰으로 바꾸기 위해)
+
+        // UTF‑8 로 변환
+    wxCharBuffer buf = text.ToUTF8();
+    std::string utf8(buf.data(), buf.length());
+
+    // roomId, nick 은 미리 정의된 std::string
+    std::string packet = roomId + ":" + sender + ":" + utf8;
+    client.Send(packet);
+    //wxString payload;
+    //size_t cur = 0;
+    //for (auto& e : insertEmojis)
+    //{
+    //    // [cur .. e.pos) 텍스트
+    //    payload += text.Mid(cur, e.pos - cur);
+    //    // 이모티콘 토큰
+    //    payload += ":" + e.name + ":";
+    //    // 다음 시작점
+    //    cur = e.pos + e.length;
+    //}
+    //// 나머지 텍스트
+    //if (cur < text.Length())
+    //    payload += text.Mid(cur);
+
+    //// 4) UTF‑8 로 변환해서 서버에 전송
+    //wxCharBuffer buf = payload.ToUTF8();
+    //std::string utf8(buf.data(), buf.length());
+    //std::string full = roomId + ":" +
+    //    ChatClient::GetInstance().GetNickname() +
+    //    ":" + utf8;
+    //ChatClient::GetInstance().Send(full);
+
+    // 5) 초기화
+    inputBox->Clear();
+    //insertEmojis.clear();
 }
 
 
@@ -479,6 +654,7 @@ void ChatFrame::OnClose(wxCloseEvent& event)
 wxTextAttr ChatFrame::GetStyleForMessage(const std::string& sender, const std::string& myNickname, const std::string& part)
 {
     wxTextAttr style;
+    style.SetBackgroundColour(*wxWHITE);
 
     if (part == "SYSTEM")
     {
@@ -499,13 +675,12 @@ wxTextAttr ChatFrame::GetStyleForMessage(const std::string& sender, const std::s
         if (sender == myNickname)
         {
             style.SetTextColour(wxColour(0, 180, 0));
-            style.SetFontWeight(wxFONTWEIGHT_BOLD);
         }
         else
         {
             style.SetTextColour(wxColour(0, 0, 180));
-            style.SetFontWeight(wxFONTWEIGHT_BOLD);
         }
+        style.SetFontWeight(wxFONTWEIGHT_BOLD);
         return style;
     }
 
@@ -513,6 +688,15 @@ wxTextAttr ChatFrame::GetStyleForMessage(const std::string& sender, const std::s
     {
         style.SetTextColour(wxColour(0, 0, 0));
         style.SetFontWeight(wxFONTWEIGHT_NORMAL);
+        return style;
+    }
+
+    if (part == "URL")
+    {
+        style.SetTextColour(wxColour(128, 0, 128)); //보라색
+        //style.SetTextColour(wxColour(225, 165, 0)); //주황색
+        style.SetFontStyle(wxFONTSTYLE_ITALIC);
+        style.SetFontWeight(wxFONTWEIGHT_BOLD);
         return style;
     }
 
@@ -659,5 +843,99 @@ void ChatFrame::OnSetProfilePic(wxCommandEvent& event)
             wxLogError("프로필 이미지를 불러올 수 없습니다.");
         }
     }
+}
+
+void ChatFrame::OnActivate(wxActivateEvent& evt)
+{
+    isActive = evt.GetActive();
+    evt.Skip();
+}
+
+void ChatFrame::ShowNotification(const wxString& roomId, const wxString& sender, const wxString& msg)
+{
+    // 팝업 윈도우 생성 (포커스를 잃으면 자동 닫힘)
+    wxPopupTransientWindow* popup =
+        new wxPopupTransientWindow(this, wxBORDER_NONE);
+
+    // 내용물 패널
+    wxPanel* panel = new wxPanel(popup);
+    //panel->SetBackgroundColour(*wxYELLOW);
+    panel->SetBackgroundStyle(wxBG_STYLE_PAINT);
+
+    // 3) 페인트 핸들러 연결 (rounded bg + 반투명)
+    panel->Bind(wxEVT_PAINT, [panel](wxPaintEvent&)
+        {
+        wxAutoBufferedPaintDC dc(panel);
+        dc.Clear();
+        wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
+        if (!gc) return;
+
+        int w = panel->GetSize().x, h = panel->GetSize().y;
+        const int r = 25; // 모서리 반경
+        // 짙은 회색 90% 불투명
+        wxBrush brush(wxColour(30, 30, 30, 230));
+        wxPen   pen(wxColour(255, 255, 255, 80), 1);
+
+        gc->SetBrush(brush);
+        gc->SetPen(pen);
+        gc->DrawRoundedRectangle(0, 0, w, h, r);
+        delete gc;
+        });
+
+    // 4) 레이아웃 준비: 헤더(방이름) / 본문(sender+msg)
+    wxBoxSizer* mainSz = new wxBoxSizer(wxVERTICAL);
+
+    // 4‑1) 헤더 바
+    wxPanel* header = new wxPanel(panel);
+    header->SetBackgroundColour(wxColour(40, 120, 220)); // 블루
+    wxStaticText* roomLbl = new wxStaticText(header, wxID_ANY, roomId);
+    roomLbl->SetForegroundColour(*wxWHITE);
+    wxFont hf = roomLbl->GetFont(); hf.SetPointSize(10); hf.SetWeight(wxFONTWEIGHT_BOLD);
+    roomLbl->SetFont(hf);
+
+    wxBoxSizer* hs = new wxBoxSizer(wxHORIZONTAL);
+    hs->Add(roomLbl, 1, wxALL, 6);
+    header->SetSizerAndFit(hs);
+    mainSz->Add(header, 0, wxEXPAND);
+
+    // 4‑2) 본문 영역
+    wxPanel* body = new wxPanel(panel);
+    body->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
+
+    wxStaticText* senderLbl = new wxStaticText(body, wxID_ANY, sender);
+    senderLbl->SetForegroundColour(wxColour(0, 0, 0));
+    wxFont sf = senderLbl->GetFont(); sf.SetPointSize(9); sf.SetWeight(wxFONTWEIGHT_BOLD);
+    senderLbl->SetFont(sf);
+
+    wxStaticText* msgLbl = new wxStaticText(body, wxID_ANY, msg);
+    msgLbl->SetForegroundColour(wxColour(128, 128, 128));
+    wxFont mf = msgLbl->GetFont(); mf.SetPointSize(8);
+    msgLbl->SetFont(mf);
+
+    wxBoxSizer* bs = new wxBoxSizer(wxVERTICAL);
+    bs->Add(senderLbl, 0, wxLEFT | wxRIGHT | wxTOP, 6);
+    bs->Add(msgLbl, 0, wxALL, 6);
+    body->SetSizerAndFit(bs);
+    mainSz->Add(body, 0, wxEXPAND);
+
+    panel->SetSizerAndFit(mainSz);
+    popup->SetClientSize(panel->GetSize());
+    wxSize popupSize = popup->GetSize();
+
+    // 알맞은 모니터 인덱스
+    int dispIdx = 0;
+    wxDisplay disp(dispIdx);
+    wxRect area = disp.GetClientArea();
+
+    // 오른쪽 하단에 배치
+    wxPoint screenPt(
+        area.x + area.width - popupSize.GetWidth(),
+        area.y + area.height - popupSize.GetHeight()
+    );
+
+
+    popup->SetPosition(screenPt);
+    popup->Popup();
+    popup->Raise();
 }
 
