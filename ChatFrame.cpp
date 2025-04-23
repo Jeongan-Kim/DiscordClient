@@ -4,6 +4,8 @@
 #include "resource.h"
 #include "AudioIO.h"
 #include <algorithm>
+#include <fstream>
+#include <sstream>
 #include <wx/filedlg.h>
 #include <wx/regex.h>
 #include <wx/popupwin.h>
@@ -12,6 +14,10 @@
 #include <wx/display.h>
 #include <wx/graphics.h>
 #include <wx/dcbuffer.h>
+#include <wx/filename.h>
+#include <wx/artprov.h>
+#include <wx/mstream.h>
+#include <wx/textctrl.h> 
 
 wxBEGIN_EVENT_TABLE(ChatFrame, wxFrame)
 EVT_ACTIVATE(ChatFrame::OnActivate)
@@ -44,8 +50,13 @@ ChatFrame::ChatFrame(ChatClient& clientInst, const std::string& roomId, wxWindow
     emoticonButton = new wxButton(panel, wxID_ANY, "E", wxDefaultPosition, wxSize(30, 30));
     emoticonButton->Bind(wxEVT_BUTTON, &ChatFrame::OnEmoticonButtonClick, this); // 이모티콘 창 생성
 
+    wxButton* attachmentBtn = new wxButton(panel, wxID_ANY, "+", wxDefaultPosition, wxSize(30, 30));
+    attachmentBtn->Bind(wxEVT_BUTTON, &ChatFrame::OnAttachmentButtonClick, this); // 파일 첨부 창 생성
+
+
     inputRowSizer->Add(inputBox, 1, wxEXPAND | wxALL, 5);
     inputRowSizer->Add(emoticonButton, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
+    inputRowSizer->Add(attachmentBtn, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
     inputRowSizer->Add(sendBtn, 0, wxALIGN_CENTER_VERTICAL | wxALL, 5);
 
     // 채팅 구성요소 추가
@@ -195,6 +206,7 @@ void ChatFrame::MarkInitialized()
 void ChatFrame::AppendMessage(const std::string& hour, const std::string& minute, const std::string& sender, const wxString& text)
 {
     chatDisplay->Freeze();
+    chatDisplay->SetInsertionPointEnd();
     chatDisplay->SetBackgroundColour(*wxWHITE);
     chatDisplay->SetOwnBackgroundColour(*wxWHITE);
 
@@ -323,15 +335,100 @@ void ChatFrame::AppendMessage(const std::string& hour, const std::string& minute
 
     chatDisplay->Newline();
     chatDisplay->SetDefaultStyle(baseMsgStyle); // 이걸 호출하면 배경은 컨트롤의 기본(위에서 흰색으로 고정)으로 돌아갑니다
+    inputBox->SetFocus();
+    inputBox->SetInsertionPointEnd();
     chatDisplay->Thaw();
 
-    if (!IsIconized() || isActive) // 현재 창이 최소화되어 있거나, 활성 상태가 아니면
+    if (IsIconized() || !isActive) // 현재 창이 최소화되어 있거나, 활성 상태가 아니면
     {
         // 방 이름(roomId)이나 발신자(sender) 등을 포함해서
         wxString note = wxString::Format( "%s: %s", roomId, text.Left(30) + wxT("…"));
         
         ShowNotification(roomId, sender, text.Left(30));
     }
+}
+
+void ChatFrame::AppendFileMessage(const std::string& hour, const std::string& minute, const std::string& sender, const std::string& filename, const std::vector<char>& data)
+{
+    // 1) Freeze/스타일 기본 설정
+    chatDisplay->Freeze();
+    chatDisplay->SetInsertionPointEnd();
+    wxTextAttr base = GetStyleForMessage(sender, client.GetNickname(), "MESSAGE");
+
+    // 2) 시간+이름 출력 (AppendMessage 와 동일)
+    wxString timeStr = "[" + wxString(hour) + ":" + wxString(minute) + "]";
+    chatDisplay->SetDefaultStyle(GetStyleForMessage(sender, client.GetNickname(), "TIME"));
+    chatDisplay->WriteText(timeStr + " ");
+    chatDisplay->SetDefaultStyle(GetStyleForMessage(sender, client.GetNickname(), "NAME"));
+    chatDisplay->WriteText(wxString(sender + " "));
+
+    // 3) 파일 UI 삽입
+    // 3-1) 이미지 파일이면 썸네일
+    wxString ext = wxFileName(filename).GetExt().Lower();
+    if (ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "gif")
+    {
+        // 메모리 스트림에서 로드
+        wxMemoryInputStream mis(data.data(), data.size());
+        wxImage img(mis, wxBITMAP_TYPE_ANY);
+        wxSize previewSz = img.GetSize();
+        if (img.IsOk())
+        {
+            if (previewSz.x > 300 || previewSz.y > 300)
+                img.Rescale(
+                    previewSz.x > 300 ? 300 : previewSz.x,
+                    previewSz.y > 300 ? 300 : previewSz.y,
+                    wxIMAGE_QUALITY_HIGH
+                );
+
+            wxBitmap bmp(img);
+
+            // ID 생성 & 맵에 저장
+            std::string id = std::to_string(wxGetLocalTimeMillis().GetValue());
+            pendingFiles[id] = PendingFile{ filename, data };
+
+            chatDisplay->WriteImage(bmp);
+
+            chatDisplay->WriteText(" "); // 약간 여백
+            // 그리고 다운로드 링크도 복원
+            chatDisplay->BeginURL("img:" + id);
+            chatDisplay->WriteText("[보기]");
+            chatDisplay->EndURL();
+        }
+        else
+        {
+            // 로드 실패 시 아이콘 + 파일명
+            wxBitmap icon = wxArtProvider::GetBitmap(
+                wxART_NORMAL_FILE, wxART_OTHER, wxSize(24, 24));
+            chatDisplay->WriteImage(icon);
+            chatDisplay->WriteText(" " + wxString(filename));
+        }
+    }
+    else
+    {
+        // 3-2) 일반 파일: 아이콘 + 파일명 + 용량 + [다운로드]
+        wxBitmap icon = wxArtProvider::GetBitmap(
+            wxART_NORMAL_FILE, wxART_OTHER, wxSize(24, 24));
+        chatDisplay->WriteImage(icon);
+
+        double sizeKB = data.size() / 1024.0;
+        chatDisplay->SetDefaultStyle(base);
+        chatDisplay->WriteText(" " + wxString(filename) + wxString::Format(" (%.1f KB) ", sizeKB));
+
+        // 식별자 생성 (예: 메모리 맵 키)
+        std::string id = wxString::Format("%lld", wxGetLocalTimeMillis().GetValue()).ToStdString();
+        pendingFiles[id] = PendingFile{ filename, data };
+
+        // [다운로드] 링크 삽입
+        chatDisplay->BeginURL("dl:" + id);
+        chatDisplay->WriteText("[다운로드]");
+        chatDisplay->EndURL();
+    }
+
+    // 4) 마무리
+    chatDisplay->Newline();
+    inputBox->SetFocus();
+    inputBox->SetInsertionPointEnd();
+    chatDisplay->Thaw();
 }
 
 void ChatFrame::UpdateUserList(const std::vector<std::string>& users) 
@@ -495,16 +592,47 @@ void ChatFrame::UpdateJoinButtons()
 
 void ChatFrame::OnURLClick(wxTextUrlEvent& event)
 {
-    // 1) URL의 시작·끝 인덱스 가져오기
-    long start = event.GetURLStart();
-    long end = event.GetURLEnd();
+    // 클릭된 “URL” (BeginURL() 에 넘긴 그 문자열)
+    wxString url = event.GetString();
 
-    // 2) 채팅 컨트롤에서 해당 범위의 문자열(=URL) 추출
-    wxString url = chatDisplay->GetRange(start, end + 1);
-    // ※ GetRange의 끝 인덱스는 inclusive이므로 +1
+    if (url.StartsWith("dl:"))
+    {
+        // ── 다운로드 링크 처리 ──
+        // 기본 동작(브라우저로 열기)은 막고
+        event.Skip(false);
 
-    // 3) 기본 브라우저로 열기
-    wxLaunchDefaultBrowser(url);
+        std::string id = std::string(url.Mid(3).utf8_str());
+        auto it = pendingFiles.find(id);
+        if (it == pendingFiles.end()) return;
+
+        // 원래 파일명과 확장자를 가져오기
+        const std::string& origName = it->second.filename;
+        wxFileName fn(origName);
+        wxString defaultName = fn.GetFullName();            // ex: "image.png"
+        wxString wildcard = "*." + fn.GetExt().Lower();   // ex: "*.png"
+
+
+        wxFileDialog dlg( this, "저장할 위치 선택", wxEmptyString, defaultName, wildcard,  wxFD_SAVE | wxFD_OVERWRITE_PROMPT);
+        if (dlg.ShowModal() == wxID_OK)
+        {
+            std::ofstream ofs(dlg.GetPath().ToStdString(), std::ios::binary);
+            ofs.write(it->second.data.data(), it->second.data.size());
+            ofs.close();
+        }
+        pendingFiles.erase(it);
+    }
+    else if (url.StartsWith("img:"))
+    {
+        ShowImagePreview(url.Mid(4).ToStdString());
+    }
+    else
+    {
+        // ── 일반 URL 처리 ──
+        // 기본 동작(브라우저로 열기) 대신 직접 실행
+        // 그리고 이벤트도 더 이상 처리하지 않음
+        event.Skip(false);
+        wxLaunchDefaultBrowser(url);
+    }
 }
 
 void ChatFrame::OnEmoticonButtonClick(wxCommandEvent& event)
@@ -566,6 +694,28 @@ void ChatFrame::OnEmoticonButtonClick(wxCommandEvent& event)
     dlg.ShowModal();
 }
 
+void ChatFrame::OnAttachmentButtonClick(wxCommandEvent& event)
+{
+    // 파일 선택 대화상자 열기
+    wxFileDialog openFileDialog(this, _("첨부파일을 선택하세요"), "", "", _("All files (*.*)|*.*"), wxFD_OPEN | wxFD_FILE_MUST_EXIST);
+
+    if (openFileDialog.ShowModal() != wxID_OK) return;    
+
+    wxString filePath = openFileDialog.GetPath();// 사용자가 선택한 파일 경로
+        
+    wxFileName filename(filePath);// 파일 정보 추출
+    wxString name = filename.GetFullName();     // 파일 이름
+    wxString ext = filename.GetExt().Lower();   // 확장자
+    wxULongLong size = filename.GetSize();      // 파일 크기
+
+    bool isImage = ext == "png" || ext == "jpg" || ext == "jpeg";
+
+    if (isImage)
+        AskImageAttachment(filePath, name, size);
+    else
+        AskFileAttachment(filePath, name, size);
+}
+
 void ChatFrame::OnVoiceJoinButtonClicked(wxCommandEvent& event)
 {    
     OutputDebugStringA(("OnVoiceJoinButtonClicked" + roomId + "\n").c_str());
@@ -595,41 +745,16 @@ void ChatFrame::OnSend(wxCommandEvent& event)
     wxString text = inputBox->GetValue(); //순수 텍스트 가져오기(placeholder 공백 들어있음)
     if (text.IsEmpty()) return;
 
-    //std::sort(insertEmojis.begin(), insertEmojis.end(), [](auto& a, auto& b) { return a.pos < b.pos; }); //이모티콘 맵핑을 오름차순으로 정렬(맨 앞 이모티콘부터 토큰으로 바꾸기 위해)
-
-        // UTF‑8 로 변환
+    // UTF‑8 로 변환
     wxCharBuffer buf = text.ToUTF8();
     std::string utf8(buf.data(), buf.length());
 
     // roomId, nick 은 미리 정의된 std::string
     std::string packet = roomId + ":" + sender + ":" + utf8;
     client.Send(packet);
-    //wxString payload;
-    //size_t cur = 0;
-    //for (auto& e : insertEmojis)
-    //{
-    //    // [cur .. e.pos) 텍스트
-    //    payload += text.Mid(cur, e.pos - cur);
-    //    // 이모티콘 토큰
-    //    payload += ":" + e.name + ":";
-    //    // 다음 시작점
-    //    cur = e.pos + e.length;
-    //}
-    //// 나머지 텍스트
-    //if (cur < text.Length())
-    //    payload += text.Mid(cur);
 
-    //// 4) UTF‑8 로 변환해서 서버에 전송
-    //wxCharBuffer buf = payload.ToUTF8();
-    //std::string utf8(buf.data(), buf.length());
-    //std::string full = roomId + ":" +
-    //    ChatClient::GetInstance().GetNickname() +
-    //    ":" + utf8;
-    //ChatClient::GetInstance().Send(full);
-
-    // 5) 초기화
     inputBox->Clear();
-    //insertEmojis.clear();
+
 }
 
 
@@ -745,6 +870,175 @@ void ChatFrame::OnHeadsetToggle(wxCommandEvent& event)
     UpdateVoiceParticipantList();
 }
 
+void ChatFrame::ShowImagePreview(const std::string& id)
+{
+    auto it = pendingFiles.find(id);
+    if (it == pendingFiles.end()) return;
+
+    // 메모리에서 wxImage 로 로드
+    const auto& pf = it->second;
+    wxMemoryInputStream mis(pf.data.data(), pf.data.size());
+    wxImage orig(mis, wxBITMAP_TYPE_ANY);
+    if (!orig.IsOk()) return;
+
+    // 2) 화면 기준 초기 스케일
+    wxRect area = wxGetClientDisplayRect();
+    int maxW = int(area.GetWidth() * 0.8);
+    int maxH = int(area.GetHeight() * 0.8);
+    double sx = double(maxW) / orig.GetWidth();
+    double sy = double(maxH) / orig.GetHeight();
+    double initScale = std::min(1.0, std::min(sx, sy));
+
+    // 스케일과 이미지를 캡처할 shared_ptr
+    auto scalePtr = std::make_shared<double>(initScale);
+    auto imgPtr = std::make_shared<wxImage>(orig);
+
+    // 3) 다이얼로그 + 스크롤윈도우 + 스태틱비트맵
+    wxDialog* dlg = new wxDialog(this, wxID_ANY, pf.filename,
+        wxDefaultPosition, wxDefaultSize,
+        wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER);
+
+    wxScrolledWindow* scrol = new wxScrolledWindow(dlg, wxID_ANY,
+        wxDefaultPosition, wxDefaultSize,
+        wxHORIZONTAL | wxVERTICAL);
+    const int scrollRateX = 10, scrollRateY = 10;
+    scrol->SetScrollRate(scrollRateX, scrollRateY);
+
+    // 함수: 스케일에 맞춰 비트맵 재생성하고 레이아웃 갱신
+    auto refreshBitmap = [=]() {
+        double s = *scalePtr;
+        int w = int(imgPtr->GetWidth() * s);
+        int h = int(imgPtr->GetHeight() * s);
+        wxImage scaled = imgPtr->Copy();
+        scaled.Rescale(w, h, wxIMAGE_QUALITY_HIGH);
+        wxBitmap bmp(scaled);
+
+        // static bitmap 이 없으면 새로, 있으면 교체
+        wxStaticBitmap* sb = scrol->FindWindowById(wxID_ANY)
+            ? dynamic_cast<wxStaticBitmap*>(scrol->GetChildren()[0])
+            : nullptr;
+        if (!sb) {
+            sb = new wxStaticBitmap(scrol, wxID_ANY, bmp);
+        }
+        else {
+            sb->SetBitmap(bmp);
+        }
+
+        scrol->SetVirtualSize(w, h);
+        scrol->Layout();
+        scrol->Refresh();
+        };
+
+    // 처음 한 번 그려 주기
+    refreshBitmap();
+
+    // 4) Ctrl+휠 바인딩
+    scrol->Bind(wxEVT_MOUSEWHEEL, [=](wxMouseEvent& evt) {
+        if (evt.ControlDown()) {
+            int rot = evt.GetWheelRotation();
+            double& s = *scalePtr;
+
+            // 확대/축소
+            s *= (rot > 0 ? 1.2 : 1 / 1.2);
+
+            // 최소값을 initScale 으로, 최대값은 필요에 따라 (예: 5.0)로 고정
+            s = std::clamp(s, initScale, 5.0);
+
+            refreshBitmap();
+            return; // 이벤트 소모
+        }
+        evt.Skip(); // 일반 스크롤은 그대로
+        });
+
+    // 5) 다운로드 버튼
+    wxButton* btn = new wxButton(dlg, wxID_ANY, "다운로드");
+
+    // 6) 레이아웃
+    wxBoxSizer* vs = new wxBoxSizer(wxVERTICAL);
+    vs->Add(scrol, 1, wxEXPAND | wxALL, 5);
+    vs->Add(btn, 0, wxALIGN_CENTER | wxALL, 5);
+    dlg->SetSizerAndFit(vs);
+
+    // 7) 다운로드 바인딩
+    btn->Bind(wxEVT_BUTTON, [=](wxCommandEvent&) {
+        wxFileName fn(pf.filename);
+        wxFileDialog filedlg(
+            dlg, "저장할 위치 선택",
+            wxEmptyString,
+            fn.GetFullName(),
+            "*." + fn.GetExt().Lower(),
+            wxFD_SAVE | wxFD_OVERWRITE_PROMPT
+        );
+        if (filedlg.ShowModal() == wxID_OK) {
+            std::ofstream ofs(filedlg.GetPath().ToStdString(),
+                std::ios::binary);
+            ofs.write(pf.data.data(), pf.data.size());
+        }
+        });
+
+    dlg->ShowModal();
+    dlg->Destroy();
+}
+
+void ChatFrame::AskImageAttachment(const wxString& path, const wxString& name, wxULongLong size)
+{
+    // 300×300 이하로 축소해서 보여주기
+    wxImage img(path, wxBITMAP_TYPE_ANY);
+    wxSize maxSz(300, 300);
+    if (img.GetWidth() > maxSz.x || img.GetHeight() > maxSz.y)
+        img.Rescale
+        (
+            img.GetWidth() > maxSz.x ? maxSz.x : img.GetWidth(),
+            img.GetHeight() > maxSz.y ? maxSz.y : img.GetHeight()
+        );
+
+    // 커스텀 다이얼로그
+    wxDialog dlg(this, wxID_ANY, _("이미지 첨부 확인"), wxDefaultPosition, wxDefaultSize);
+    wxBoxSizer* vs = new wxBoxSizer(wxVERTICAL);
+
+    vs->Add(new wxStaticBitmap(&dlg, wxID_ANY, wxBitmap(img)), 0, wxALIGN_CENTER | wxALL, 10);
+
+    wxString info = wxString::Format(_("파일명: %s\n크기: %.2f KB"), name, size.ToDouble() / 1024.0);
+    vs->Add(new wxStaticText(&dlg, wxID_ANY, info), 0, wxALIGN_LEFT | wxALL, 10);
+
+    wxString ask = wxString::Format(_("이 파일을 보내시겠습니까?"));
+    vs->Add(new wxStaticText(&dlg, wxID_ANY, ask), 0, wxALIGN_LEFT | wxALL, 10);
+
+    vs->Add(dlg.CreateSeparatedButtonSizer(wxOK | wxCANCEL), 0, wxEXPAND | wxALL, 10);
+
+    dlg.SetSizerAndFit(vs);
+
+    if (dlg.ShowModal() == wxID_OK)
+        client.SendFile(roomId, client.GetNickname(), path.ToStdString());
+}
+
+void ChatFrame::AskFileAttachment(const wxString& path, const wxString& name, wxULongLong size)
+{
+    wxDialog dlg(this, wxID_ANY, _("파일 첨부 확인"));
+    wxBoxSizer* vs = new wxBoxSizer(wxVERTICAL);
+
+    // 왼쪽 아이콘
+    wxBitmap icon = wxArtProvider::GetBitmap(wxART_NORMAL_FILE, wxART_OTHER, wxSize(32, 32));
+    wxBoxSizer* hs = new wxBoxSizer(wxHORIZONTAL);
+    hs->Add(new wxStaticBitmap(&dlg, wxID_ANY, icon), 0, wxALL, 10);
+
+    // 오른쪽 텍스트
+    wxString info = wxString::Format(_("파일명: %s\n크기: %.2f KB"), name, size.ToDouble() / 1024.0);
+    hs->Add(new wxStaticText(&dlg, wxID_ANY, info), 0, wxALIGN_CENTER_VERTICAL | wxALL, 10);
+
+    vs->Add(hs, 0, wxALL, 0);
+
+    wxString ask = wxString::Format(_("이 파일을 보내시겠습니까?"));
+    vs->Add(new wxStaticText(&dlg, wxID_ANY, ask), 0, wxALIGN_LEFT | wxALL, 10);
+    vs->Add(dlg.CreateSeparatedButtonSizer(wxOK | wxCANCEL),
+        0, wxEXPAND | wxALL, 10);
+
+    dlg.SetSizerAndFit(vs);
+
+    if (dlg.ShowModal() == wxID_OK)
+        client.SendFile(roomId, client.GetNickname(), path.ToStdString());
+}
+
 void ChatFrame::OnParticipantRightClick(wxListEvent& event) {
     long itemIndex = event.GetIndex();
     wxString username = voiceChannelList->GetItemText(itemIndex);
@@ -854,31 +1148,57 @@ void ChatFrame::OnActivate(wxActivateEvent& evt)
 void ChatFrame::ShowNotification(const wxString& roomId, const wxString& sender, const wxString& msg)
 {
     // 팝업 윈도우 생성 (포커스를 잃으면 자동 닫힘)
-    wxPopupTransientWindow* popup =
-        new wxPopupTransientWindow(this, wxBORDER_NONE);
+    //wxPopupTransientWindow* popup = new wxPopupTransientWindow(this, wxBORDER_NONE);
+    wxFrame* popup = new wxFrame(
+        nullptr, wxID_ANY, wxEmptyString,
+        wxDefaultPosition, wxDefaultSize,
+        wxFRAME_SHAPED
+        | wxFRAME_NO_TASKBAR
+        | wxSTAY_ON_TOP
+        | wxBORDER_NONE
+    );
+    popup->Bind(wxEVT_ACTIVATE, [popup](wxActivateEvent& evt) {
+        if (!evt.GetActive())
+            popup->Destroy();
+        evt.Skip();  // 다음 바인딩에도 이벤트 전달
+        });
+
+    // 2) 타이머로 일정 시간 뒤 사라지게 하기 (예: 5초)
+    //    wxTimer 의 부모를 popup 으로 두면 popup 파괴시 자동으로 해제됨
+    wxTimer* timer = new wxTimer(popup);
+    popup->Bind(wxEVT_TIMER, [popup, timer](wxTimerEvent&) {
+        if (popup && popup->IsShown())
+            popup->Destroy();
+        // timer 는 popup 파괴시 함께 사라집니다.
+        });
+    timer->Start(5000, /*oneShot=*/true);
 
     // 내용물 패널
     wxPanel* panel = new wxPanel(popup);
-    //panel->SetBackgroundColour(*wxYELLOW);
-    panel->SetBackgroundStyle(wxBG_STYLE_PAINT);
+    panel->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
 
     // 3) 페인트 핸들러 연결 (rounded bg + 반투명)
     panel->Bind(wxEVT_PAINT, [panel](wxPaintEvent&)
         {
         wxAutoBufferedPaintDC dc(panel);
+        dc.SetBackground(*wxTRANSPARENT_BRUSH);
         dc.Clear();
         wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
         if (!gc) return;
 
+        gc->SetAntialiasMode(wxANTIALIAS_DEFAULT);
+
         int w = panel->GetSize().x, h = panel->GetSize().y;
-        const int r = 25; // 모서리 반경
+        const int r = 12; // 모서리 반경
+
         // 짙은 회색 90% 불투명
         wxBrush brush(wxColour(30, 30, 30, 230));
-        wxPen   pen(wxColour(255, 255, 255, 80), 1);
+        wxPen   pen(wxColour(255, 255, 255, 180), 1.0);
 
         gc->SetBrush(brush);
         gc->SetPen(pen);
-        gc->DrawRoundedRectangle(0, 0, w, h, r);
+        gc->DrawRoundedRectangle(0, 0, w, h, r); // TODO:모서리 둥글게 처리 안됨.
+        
         delete gc;
         });
 
@@ -920,22 +1240,44 @@ void ChatFrame::ShowNotification(const wxString& roomId, const wxString& sender,
 
     panel->SetSizerAndFit(mainSz);
     popup->SetClientSize(panel->GetSize());
-    wxSize popupSize = popup->GetSize();
+    popup->SetBackgroundStyle(wxBG_STYLE_TRANSPARENT);
+    panel->SetBackgroundStyle(wxBG_STYLE_PAINT);
 
-    // 알맞은 모니터 인덱스
-    int dispIdx = 0;
-    wxDisplay disp(dispIdx);
+    popup->Show();
+    popup->Raise();
+
+#ifdef __WXMSW__
+    HWND hwnd = (HWND)popup->GetHWND();
+    LONG ex = ::GetWindowLong(hwnd, GWL_EXSTYLE);
+    ::SetWindowLong(hwnd, GWL_EXSTYLE, ex | WS_EX_LAYERED);
+    ::SetLayeredWindowAttributes(hwnd, 0, 255, LWA_ALPHA);
+#endif
+
+    // 5) region(rounded rect) 생성
+    int w = panel->GetSize().GetWidth();
+    int h = panel->GetSize().GetHeight();
+    const int r = 12;
+#ifdef __WXMSW__
+    // CreateRoundRectRgn의 마지막 두 인자는 ellipse width/height,
+    // 즉 radius*2 를 넘겨야 진짜 반지름 r 가 됩니다.
+    HRGN hRgn = ::CreateRoundRectRgn(0, 0, w, h, r * 2, r * 2);
+    wxRegion region(hRgn);  // hrgn 소유권은 wxRegion 이 가져갑니다
+#else
+    // Windows 가 아니면 일단 사각 region 으로 fallback
+    wxRegion region(wxRect(0, 0, w, h));
+#endif
+
+    // 4) Apply shape
+    popup->SetShape(region);
+
+    // 5) 위치 잡기
+    wxSize sz = popup->GetSize();
+    wxDisplay disp((unsigned int)0);
     wxRect area = disp.GetClientArea();
-
-    // 오른쪽 하단에 배치
-    wxPoint screenPt(
-        area.x + area.width - popupSize.GetWidth(),
-        area.y + area.height - popupSize.GetHeight()
+    popup->SetPosition(
+        { area.x + area.width - sz.GetWidth(),
+          area.y + area.height - sz.GetHeight() }
     );
 
-
-    popup->SetPosition(screenPt);
-    popup->Popup();
-    popup->Raise();
 }
 

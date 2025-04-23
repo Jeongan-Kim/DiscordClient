@@ -15,6 +15,14 @@ ChatRoomManager::ChatRoomManager()
             HandleIncomingMessage(msg);
         };
 
+    client.onFileReceived =
+        [&](const std::string& roomId, const std::string& hour, const std::string& minute, const std::string& sender, const std::string& filename, std::vector<char> data)
+        {
+            // 이미지면 wxImage 로 띄우고
+            // 아니면 파일 패널 만들어 다운로드 버튼 달기
+            HandleFileMessage(roomId, hour, minute, sender, filename, std::move(data));
+        };
+
 	client.StartReceiving(); // 메시지 수신 시작
     OutputDebugStringA("메시지 수신 시작\n");
 
@@ -409,6 +417,25 @@ void ChatRoomManager::HandleRoomsInfoMessage(const std::string& msg)
 	{
 		roomListDialog->RefreshRoomList(roomsInfo);		
 	}
+}
+
+void ChatRoomManager::HandleFileMessage(const std::string& roomId, const std::string& hour, const std::string& minute, const std::string& sender, const std::string& filename, std::vector<char> data)
+{
+    //OutputDebugStringA(("서버로부터: " + msg + "\n").c_str());
+
+    if (chatFrames.count(roomId)) // 방이 열려있다면
+    {
+        wxTheApp->CallAfter([=]
+            {
+                chatFrames[roomId]->AppendFileMessage(hour, minute, sender, filename, data); // 메시지 추가
+            });
+    }
+
+    if (!chatFrames.count(roomId)) {
+        // 절대로 방을 다시 열면 안됨!
+        OutputDebugStringA(("수신된 메시지인데 방이 닫혀 있음. roomId: " + roomId + "\n").c_str());
+        return;
+    }
 }
 
 ChatRoomManager& ChatRoomManager::GetInstance()

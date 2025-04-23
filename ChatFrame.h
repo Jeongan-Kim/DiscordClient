@@ -21,6 +21,12 @@ struct EmojiInfo
     std::string name; // 이모지 이름
 };
 
+struct PendingFile
+{
+    std::string filename;
+    std::vector<char> data;
+};
+
 class ChatRoomManager; // 전방 선언
 // ChatRoomManager에서 받은 메시지를 단순히UI에 출력하는 역할만 담당
 class ChatFrame : public wxFrame
@@ -32,6 +38,7 @@ public:
 	bool IsReady() const { return isInitialized; } // 레이아웃 초기화 여부 확인
 
     void AppendMessage(const std::string& hour, const std::string& minute, const std::string& sender, const wxString& text);
+    void AppendFileMessage(const std::string& hour, const std::string& minute, const std::string& sender, const std::string& filename, const std::vector<char>& data);
 	void UpdateUserList(const std::vector<std::string>& users); // 전체 채팅 참여자 목록을 업데이트하는 함수
 
     void OnVoiceChannelJoinedByManager();
@@ -83,6 +90,8 @@ private:
 
     wxStaticBitmap* profilePic;  // 프로필 이미지
 
+    std::map<std::string, PendingFile> pendingFiles; // file data를 저장해둘 맵(key : event.GetURL()로 넘어오는 식별자)
+
     std::vector<EmojiInfo> insertEmojis; // inputBox에 삽입한 이모지 정보
     std::unordered_map<std::string, int> emojiRes = { { "angry", 114 }, { "confused", 115 }, { "poop", 116 }, { "kiss", 117 }, { "frowning", 118 },
                                                         { "grinning", 119 }, { "grinningsweat", 120 }, { "grinningwink", 121 }, { "rollsmile", 122 },
@@ -106,12 +115,18 @@ private:
 
     void UpdateJoinButtons();
 
-    void OnURLClick(wxTextUrlEvent& event);
+    void OnURLClick(wxTextUrlEvent& event); // 링크나 파일 다운로드 클릭 시 호출
     void OnEmoticonButtonClick(wxCommandEvent& event);
+    void OnAttachmentButtonClick(wxCommandEvent& event);
     void OnVoiceJoinButtonClicked(wxCommandEvent& event);
     void OnVoiceLeaveButtonClicked(wxCommandEvent& event);
     void OnMicToggle(wxCommandEvent& event);
 	void OnHeadsetToggle(wxCommandEvent& event);
+
+    void ShowImagePreview(const std::string& id);
+
+    void AskImageAttachment(const wxString& path, const wxString& name, wxULongLong size);
+    void AskFileAttachment(const wxString& path, const wxString& name, wxULongLong size);
 
     void OnParticipantRightClick(wxListEvent& event);
 

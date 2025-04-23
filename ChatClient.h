@@ -24,9 +24,11 @@ public:
 	void JoinRoom(const std::string& roomId); // 방에 입장하는 함수
 
     void Send(const std::string& message);
+    void SendFile(const std::string& roomId, const std::string& sender, const std::string& filepath);
     void StartReceiving();
     void SetNickname(const std::string name);
     std::function<void(const std::string&)> onMessageReceived;  //GUI에서 메시지 받았을 때 해야 할 행동, 콜백함수
+    std::function<void(const std::string& roomId, const std::string& hour, const std::string& minute, const std::string& sender, const std::string& filename, std::vector<char> data)> onFileReceived;  // 파일 받았을 때 해야 할 행동, 콜백함수
 
 	static ChatClient& GetInstance(); // 어디서든 접근할 수 있도록 싱글톤 패턴으로 구현
     std::string GetNickname() const { return nickname; }

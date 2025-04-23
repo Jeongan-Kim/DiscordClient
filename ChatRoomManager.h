@@ -34,6 +34,8 @@ public:
     void HandleUserListMessage(const std::string& msg);
     void HandleVoiceListMessage(const std::string& msg);
     void HandleRoomsInfoMessage(const std::string& msg);
+    void HandleFileMessage(const std::string& roomId, const std::string& hour, const std::string& minute, const std::string& sender, const std::string& filename, std::vector<char> data);
+
 
     static ChatRoomManager& GetInstance(); // 어디서든 접근할 수 있도록 싱글톤 패턴으로 구현
 

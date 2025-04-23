@@ -2,7 +2,11 @@
 #include <wx/app.h> 
 #include "ChatClient.h"
 #include <iostream>
+#include <fstream>
+#include <sstream>
+#include <algorithm>
 #include <ws2tcpip.h>
+#include <wx/filename.h>
 #pragma comment(lib, "ws2_32.lib")
 
 ChatClient::ChatClient() {
@@ -123,37 +127,150 @@ void ChatClient::Send(const std::string& message)
     }
 }
 
+void ChatClient::SendFile(const std::string& roomId, const std::string& sender, const std::string& filepath)
+{
+    if (!isConnected) return;
+
+    // wxFileName 으로 파일명/크기 얻기
+    wxFileName fn(filepath);
+    std::string filename = fn.GetFullName().ToStdString();
+    wxULongLong wxSize = fn.GetSize();
+    unsigned long long fileSize = wxSize.GetValue();
+
+    // 파일 전송용 소켓 열기
+    SOCKET sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    sockaddr_in addr = {};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(9001);         
+    addr.sin_addr.s_addr = inet_addr(DiscoverServerIP().c_str());
+    if (connect(sock, (sockaddr*)&addr, sizeof(addr)) != 0)
+    {
+        closesocket(sock);
+        return;
+    }
+
+    // 헤더 조립: "FILE:room:sender:filename:filesize\n"
+    std::ostringstream hdr;
+    hdr << "FILE:" << roomId << ':' << sender << ':' << filename << ':' << fileSize << '\n';
+    std::string header = hdr.str();
+
+    // 헤더 전송
+    send(sock, header.c_str(), header.size(), 0);
+
+    // 5) 본문(바이너리) 전송
+    std::ifstream ifs(filepath, std::ios::binary);
+    std::vector<char> buffer(8192);
+    size_t remaining = fileSize;
+    while (remaining > 0 && ifs.good()) {
+        size_t chunk = std::min(remaining, buffer.size());
+        ifs.read(buffer.data(), chunk);
+        send(sock, buffer.data(), chunk, 0);
+        remaining -= chunk;
+    }
+
+    OutputDebugStringA(("Sent file: " + filename + "\n").c_str());
+    closesocket(sock);
+}
+
 void ChatClient::StartReceiving()
 {
     std::thread([this]() {
         OutputDebugStringA("StartReceiving started\n");
-        char buffer[1024];
-        int bytes;
-        std::string recvBuffer;
+        enum RecvState { READ_HEADER, READ_PAYLOAD };
+        RecvState state = READ_HEADER;
 
-        while (isConnected && (bytes = recv(sock, buffer, sizeof(buffer) - 1, 0)) > 0) 
+        //char buffer[1024];
+        //int bytes;
+        //std::string recvBuffer;
+
+        std::string headerBuf;
+        size_t      bytesToRead = 0;
+        std::vector<char> payloadBuf;
+        struct { std::string roomId, hour, minute, sender, filename; } meta;
+
+        char rawBuf[4096];
+        int  bytes;
+
+        while (isConnected && (bytes = recv(sock, rawBuf, sizeof(rawBuf), 0)) > 0)
         {
-            buffer[bytes] = '\0';
-            //std::string msg = buffer;
-            recvBuffer += buffer;
-            OutputDebugStringA("Received message\n");
-
-            size_t pos;
-            while ((pos = recvBuffer.find('\n')) != std::string::npos)
+            size_t offset = 0;
+            while (offset < (size_t)bytes)
             {
-                std::string msg = recvBuffer.substr(0, pos);
-                recvBuffer.erase(0, pos + 1);
-
-                if (onMessageReceived && isConnected)
+                if (state == READ_HEADER)
                 {
-                    // 복사해서 안전하게 UI 쓰레드로 전달
-                    wxTheApp->CallAfter([=]() {
-                        onMessageReceived(msg);
-                        });
+                    // 1) 개행까지 읽어서 headerBuf에 누적
+                    char* nl = (char*)memchr(rawBuf + offset, '\n', bytes - offset);
+                    if (nl)
+                    {
+                        size_t lineLen = nl - (rawBuf + offset) + 1;
+                        headerBuf.append(rawBuf + offset, lineLen);
+                        headerBuf.pop_back(); // '\n' 제거
+
+                        if (headerBuf.rfind("FILE:", 0) == 0)
+                        {
+                            // FILE:room:hour:minute:sender:filename:filesize
+                            auto trim = headerBuf.substr(5);
+                            size_t p1 = trim.find(':');  // roomId 뒤
+                            size_t p2 = trim.find(':', p1 + 1); // hour 뒤
+                            size_t p3 = trim.find(':', p2 + 1); // minute 뒤
+                            size_t p4 = trim.find(':', p3 + 1); // sender 뒤
+                            size_t p5 = trim.find(':', p4 + 1); // filename 뒤
+
+                            meta.roomId = trim.substr(0, p1);
+                            meta.hour = trim.substr(p1 + 1, p2 - p1 - 1);
+                            meta.minute = trim.substr(p2+ 1, p3 - p2 - 1);
+                            meta.sender = trim.substr(p3 + 1, p4 - p3 - 1);
+                            meta.filename = trim.substr(p4 + 1, p5 - p4 - 1);
+                            bytesToRead = std::stoull(trim.substr(p5 + 1));
+                            payloadBuf.clear();
+                            payloadBuf.reserve(bytesToRead);
+                            state = READ_PAYLOAD;
+                        }
+                        else
+                        {
+                            // 순수 텍스트 메시지
+                            if (onMessageReceived)
+                                onMessageReceived(headerBuf);
+                        }
+                        headerBuf.clear();
+                        offset += lineLen;
+                    }
+                    else
+                    {
+                        // 개행 못 만났으면 남은 전부 누적
+                        headerBuf.append(rawBuf + offset, bytes - offset);
+                        offset = bytes;
+                    }
+                }
+                else // READ_PAYLOAD
+                {
+                    // 2) 파일 본문: bytesToRead 만큼 읽어서 payloadBuf에 담기
+                    size_t need = bytesToRead - payloadBuf.size();
+                    size_t can = std::min(need, (size_t)bytes - offset);
+                    payloadBuf.insert(payloadBuf.end(),
+                        rawBuf + offset,
+                        rawBuf + offset + can);
+                    offset += can;
+
+                    if (payloadBuf.size() == bytesToRead)
+                    {
+                        // 3) 파일 수신 완료 콜백
+                        if (onFileReceived)
+                            onFileReceived(
+                                meta.roomId,
+                                meta.hour,
+                                meta.minute,
+                                meta.sender,
+                                meta.filename,
+                                std::move(payloadBuf)
+                            );
+                        // 다음 메시지로 돌아가기
+                        state = READ_HEADER;
+                        headerBuf.clear();
+                    }
                 }
             }
         }
-        OutputDebugStringA("Receiving thread ended\n");
         }).detach();
 }
 
