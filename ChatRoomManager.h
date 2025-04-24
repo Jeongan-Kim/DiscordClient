@@ -40,7 +40,7 @@ public:
     static ChatRoomManager& GetInstance(); // 어디서든 접근할 수 있도록 싱글톤 패턴으로 구현
 
 	const std::map<std::string, ChatFrame*>& GetChatFrames() const { return chatFrames; } // 열려있는 채팅방 목록 반환
-
+    wxString DecodeServerText(const std::string& raw);
 private:
     std::map<std::string, ChatFrame*> chatFrames;  // roomId -> ChatFrame
     std::unordered_map<std::string, std::string> roomsInfo;           //방 이름 -> 방 비밀번호 

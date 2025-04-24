@@ -7,7 +7,9 @@ int ServerAPI::serverPort = 9000;
 bool ServerAPI::Init() 
 {
     ChatClient& client = ChatClient::GetInstance();  // ½Ì±ÛÅæ °´Ã¼ Á¢±Ù, Å¬¶óÀÌ¾ðÆ® »ý¼º
-	serverIP = client.DiscoverServerIP();  // ¼­¹ö IP Å½»ö
+    //serverIP = client.DiscoverServerIP();  // ¼­¹ö IP Å½»ö
+    serverIP = "34.83.230.233";  // ¼­¹ö IP Å½»ö
+    client.SetServerIP(serverIP);
 
     return !serverIP.empty();
 }

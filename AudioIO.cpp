@@ -141,7 +141,7 @@ bool AudioIO::StartCapture()
         serverAddr.sin_family = AF_INET;
         serverAddr.sin_port = htons(50507);
 
-        std::string serverIP = ChatClient::GetInstance().DiscoverServerIP();
+        std::string serverIP = ChatClient::GetInstance().GetServerIP();
         inet_pton(AF_INET, serverIP.c_str(), &serverAddr.sin_addr);
 
 

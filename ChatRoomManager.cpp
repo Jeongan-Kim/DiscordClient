@@ -217,8 +217,13 @@ void ChatRoomManager::HandleSystemMessage(const std::string& msg)
     if (it != chatFrames.end())
     {
         ChatFrame* frame = it->second;
-        wxTheApp->CallAfter([=] {
-            frame->AppendMessage("", "", "SYSTEM", content);
+        //OutputDebugStringA(content.c_str());
+
+        wxString display = DecodeServerText(content); //vm 서버로 틀때인지 로컬에서 튼 서버인지 구분
+
+        wxTheApp->CallAfter([frame, display]
+            {
+            frame->AppendMessage("", "", "SYSTEM", display);
             });
     }
     else
@@ -442,6 +447,17 @@ ChatRoomManager& ChatRoomManager::GetInstance()
 {
     static ChatRoomManager instance;
     return instance;
+}
+
+wxString ChatRoomManager::DecodeServerText(const std::string& raw)
+{
+    // 1) UTF-8 먼저 시도
+    wxString txt = wxString::FromUTF8(raw.c_str());
+    if (!txt.IsEmpty()) return txt;
+
+    // 2) 실패했다면 로컬 코드페이지로
+    return wxString(raw.c_str(), wxCSConv(wxT("CP949")));
+    // 또는 wxConvLocal (현재 로케일)
 }
 
 

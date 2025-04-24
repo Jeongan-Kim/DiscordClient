@@ -142,7 +142,7 @@ void ChatClient::SendFile(const std::string& roomId, const std::string& sender, 
     sockaddr_in addr = {};
     addr.sin_family = AF_INET;
     addr.sin_port = htons(9001);         
-    addr.sin_addr.s_addr = inet_addr(DiscoverServerIP().c_str());
+    addr.sin_addr.s_addr = inet_addr(GetServerIP().c_str());
     if (connect(sock, (sockaddr*)&addr, sizeof(addr)) != 0)
     {
         closesocket(sock);

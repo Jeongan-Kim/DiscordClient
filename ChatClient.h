@@ -15,7 +15,8 @@ public:
     ~ChatClient();
 
     std::string DiscoverServerIP(); // 서버 IP 찾는 함수, 서버가 열려있는지 묻는 함수
-
+    void SetServerIP(std::string ip) { serverIP = ip; }
+    std::string GetServerIP() { return serverIP; }
 
     bool Connect(const std::string& ip, int port);
     void Disconnect();
@@ -36,6 +37,7 @@ public:
 
 private:
     SOCKET sock;
+    std::string serverIP;
     bool isConnected = false;
     //std::map<std::string, ChatFrame*> chatFrames; // 열려있는 채팅방들
     std::string nickname;
